@@ -1,12 +1,11 @@
 [project]
-name = "user-managment-api"
+name = "user-management-api"
 version = "0.1.0"
-description = ""
 authors = [
-    {name = "Your Name",email = "you@example.com"}
+    {name = "Yulya Sarokina"}
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "^3.13"
 dependencies = [
     "fastapi (>=0.135.1,<0.136.0)",
     "sqlalchemy (>=2.0.48,<3.0.0)",
@@ -14,7 +13,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-packages = [{include = "user_managment_api", from = "src"}]
+packages = [{include = "user_management_api", from = "src"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

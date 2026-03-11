@@ -8,7 +8,5 @@ and database connection URL.
 
 class Settings:
     """Global application configuration settings."""
-    APP_NAME: str = "user_managment_api"
+    APP_NAME: str = "user_management_api"
     DEBUG: bool = True
-
-    MEDIA_DIR = "/media"

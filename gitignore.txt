@@ -168,5 +168,3 @@ media/foto
 celerybeat-schedule.db
 
 # User_Managment_Service
-src/user_managment_api/media
-/media
