@@ -1,0 +1,25 @@
+[project]
+name = "user-management-api"
+version = "0.1.0"
+authors = [
+    {name = "Yulya Sarokina"}
+]
+readme = "README.md"
+requires-python = "^3.13"
+dependencies = [
+    "fastapi (>=0.135.1,<0.136.0)",
+    "sqlalchemy (>=2.0.48,<3.0.0)",
+    "uvicorn (>=0.41.0,<0.42.0)"
+]
+
+[tool.poetry]
+packages = [{include = "user_management_api", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.15.5,<0.16.0)"
+]
