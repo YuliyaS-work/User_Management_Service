@@ -17,4 +17,3 @@ async def get_session():
     """Provide a database session for FastAPI dependency injection."""
     async with AsyncSessionLocal() as session:
         yield session
-        # await session.close()
