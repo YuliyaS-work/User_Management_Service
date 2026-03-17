@@ -14,3 +14,5 @@ class Settings:
     APP_NAME: str = "user_management_api"
     DEBUG: bool = True
     DATABASE_URL: str = os.getenv("DATABASE_URL")
+    SECRET_KEY: str = os.getenv("SECRET_KEY")
+    ALGORITHM: str = os.getenv("ALGORITHM")
