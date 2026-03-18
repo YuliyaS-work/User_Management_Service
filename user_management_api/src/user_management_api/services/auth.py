@@ -5,6 +5,7 @@ from fastapi import HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token
+from src.user_management_api.core.config import  Settings
 from src.user_management_api.schemas.auth import UserRegister
 from src.user_management_api.dao.user import UserDAO
 
@@ -21,8 +22,9 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     new_user = await UserDAO.add(db, **user_dict)
     await db.commit()
 
-    access_token = create_access_token({"sub": new_user.id})
-    refresh_token = create_refresh_token({"sub": new_user.id})
+    user_id = str(new_user.id)
+    access_token = create_access_token({"sub": user_id})
+    refresh_token = create_refresh_token({"sub": user_id})
     response.set_cookie(
         key="user_access_token",
         value=access_token,
@@ -35,7 +37,5 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
         httponly=True,
         secure=True
     )
-
-    return {"message": "Вы успешно зарегистрированы!"}
-
-
+    Settings.r.set(f"user_id_{user_id}", f"{refresh_token}")
+    return {"message": "User registered successfully"}

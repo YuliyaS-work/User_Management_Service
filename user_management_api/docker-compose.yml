@@ -18,6 +18,15 @@ services:
       ports:
         - "5432:5432"
 
+    redis:
+      image: redis:latest
+      restart: unless-stopped
+      ports:
+        - "6379:6379"
+      volumes:
+        - redis_data:/data
+      command: redis-server --bind 0.0.0.0 --requirepass ${REDIS_PASSWORD}
+
 
 
     ums_app:
@@ -27,11 +36,29 @@ services:
         uvicorn src.user_management_api.main:app --host 0.0.0.0 --port 8000"
       environment:
         - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@db_ums:5432/${DB_NAME}
+        - REDIS_HOST=${REDIS_HOST}
+        - REDIS_PASSWORD=${REDIS_PASSWORD}
+        - REDIS_PORT=${REDIS_PORT}
+        - SECRET_KEY=${SECRET_KEY}
+        - ALGORITHM=${ALGORITHM}
+        - JWT_PRVK_PATH=${JWT_PRVK_PATH}
+        - JWT_PBK_PATH=${JWT_PBK_PATH}
+      secrets:
+        - jwt_private
+        - jwt_public
       depends_on:
         db_ums:
           condition: service_healthy
+        redis:
+          condition: service_started
       ports:
         - "8000:8000"
+secrets:
+  jwt_private:
+    file: ./secrets/jwt_private.pem
+  jwt_public:
+    file: ./secrets/jwt_public.pem
 
 volumes:
   postgres-data:
+  redis_data:
