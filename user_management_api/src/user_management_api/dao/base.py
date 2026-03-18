@@ -11,8 +11,15 @@ class BaseDAO:
     model=None
 
     @classmethod
-    async def find_one_or_none(cls, db: AsyncSession,  **filter) -> User | None:
-        query = select(cls.model).filter_by(**filter)
+    async def find_one_or_none(cls, db: AsyncSession, where=None,  **filters) -> User | None:
+        query = select(cls.model)
+
+        if where is not None:
+            query = query.where(where)
+
+        if filters:
+            query = query.filter_by(**filters)
+
         result = await db.execute(query)
         return result.scalar_one_or_none()
 

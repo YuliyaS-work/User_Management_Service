@@ -25,9 +25,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID]= mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    surname: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    username: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    surname: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[Optional[PhoneNumber]] = mapped_column(PhoneNumberType(), nullable=True)
     email: Mapped[str]= mapped_column(EmailType(), nullable=False, unique=True)

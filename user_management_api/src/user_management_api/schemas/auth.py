@@ -2,36 +2,27 @@
 Pydentic model used for user authentication, including sign-up and login.
 Provides validation are used for incoming authentication data.
 """
-import re
-
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from pydantic_core import PydanticCustomError
+
+from src.user_management_api.validators.auth import validate_email, validate_phone_number, validate_password
+
 
 class UserRegister(BaseModel):
-    name: str = Field(..., min_length=2, max_length=50, description="Имя, от 2 до 50 символов")
-    surname: str = Field(..., min_length=2, max_length=50, description="Фамилия, от 2 до 50 символов")
-    username: str = Field(..., min_length=5, max_length=20, description="Никнейм, от 5 до 20 символов")
-    password: str = Field(..., min_length=8, max_length=64, description="Имя, от 8 до 64 символов")
-    phone_number: str | None = Field(..., description="Номер телефона в международном формате, начинающийся с '+'")
-    email: EmailStr = Field(..., description="Электронная почта")
+    name: str = Field(..., min_length=2, max_length=50, description="Name must be between 2 and 50 characters long.")
+    surname: str = Field(..., min_length=2, max_length=50, description="Surname must be between 2 and 50 characters long.")
+    username: str = Field(..., min_length=5, max_length=20, description="Username must be between 5 and 20 characters long.")
+    password: str = Field(..., min_length=8, max_length=64, description="Password must be between 5 and 20 characters long.")
+    phone_number: str | None = Field(..., description="Phone number in international format starting with '+'")
+    email: EmailStr = Field(..., description="Email")
 
     @field_validator("email", mode="before")
-    def validate_email(cls, value: EmailStr) -> EmailStr:
-        # check input befor EmailStr
-        if "@" not in value or "." not in value:
-            raise PydanticCustomError(
-                'email.invalid',
-                'Email введён некорректно.Пожалуйста, проверьте формат.'
-            )
-        return value
+    def validate_email_reg(cls, value) -> EmailStr:
+        return validate_email(value)
 
     @field_validator("phone_number")
-    def validate_phone_number(cls, value: str) -> str | None:
-        if value:
-            if not re.match(r'^\+\d{10,17}$', value):
-                raise ValueError("Номер телефона должен начинаться с '+'  и содержать от 10 до 17 цифр")
-        return value
+    def validate_phone_number_reg(cls, value) -> str | None:
+        return validate_phone_number(value)
 
-
-
-
+    @field_validator("password")
+    def validate_password_reg(cls, value) -> str:
+        return validate_password(value)
