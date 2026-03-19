@@ -30,8 +30,8 @@ class Role(Base):
     id: Mapped[int]= mapped_column(Integer, primary_key=True)
     role_name: Mapped[StatusRole] = mapped_column(
         Enum(StatusRole, native_enum=False, name="status_role"),
-        server_default = "user",
-        nullable = False
+        nullable = False,
+        unique=True
     )
     users: Mapped[list["User"]] = relationship(
        secondary=user_role,
