@@ -13,7 +13,21 @@ from src.user_management_api.dao.user import UserDAO
 
 
 async def register_user(response: Response, user_data: UserRegister, db: AsyncSession) -> dict:
-    user = await UserDAO.find_one_or_none(db, or_(User.username == user_data.username, User.email == user_data.email))
+    """
+        Register a user and create a record in the database.
+
+        Args:
+            response (Response): save JWT tokens in cookies.
+            user_data (UserRegister): Data required to create a new user in the database.
+            db (AsyncSession): Database session.
+        Returns:
+            dict: Message about success of registration.
+        """
+    # Check that email and username are unique.
+    user = await UserDAO.find_one_or_none(
+        db,
+        or_(User.username == user_data.username, User.email == user_data.email)
+    )
     if user:
         if user.username == user_data.username:
             raise HTTPException(
@@ -25,14 +39,24 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email already exists"
             )
+    # Get a dictionary of instance.
     user_dict = user_data.model_dump()
+
+    # Get password hash.
     user_dict["password"] = get_password_hash(user_data.password)
+
+    # Add a user to the database.
     new_user = await UserDAO.add(db, **user_dict)
     await db.commit()
 
+    # UUID to string for JSON serialization to get tokens.
     user_id = str(new_user.id)
+
+    # Create JWT tokens.
     access_token = create_access_token({"sub": user_id})
     refresh_token = create_refresh_token({"sub": user_id})
+
+    # Set JWT tokens to cookies.
     response.set_cookie(
         key="user_access_token",
         value=access_token,
@@ -45,5 +69,8 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
         httponly=True,
         secure=True
     )
-    Settings.r.set(f"user_id_{user_id}", f"{refresh_token}")
+
+    # Set JWT refresh token in Redis.
+    Settings.r.set(f"refresh_token:{user_id}", f"{refresh_token}")
+
     return {"message": "User registered successfully"}

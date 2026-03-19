@@ -15,5 +15,19 @@ auth_router = APIRouter(prefix="/auth")
 
 
 @auth_router.post("/signup")
-async def register_user_item(response: Response, user_data: UserRegister, db: AsyncSession = Depends(get_session)) -> dict:
+async def register_user_item(
+        response: Response,
+        user_data: UserRegister,
+        db: AsyncSession = Depends(get_session)
+) -> dict:
+    """
+    Register a user.
+
+    Args:
+        response (Response): save JWT tokens in cookies.
+        user_data (UserRegister): Data required to create a new user.
+        db (AsyncSession): Database session.
+    Returns:
+        dict: Message about success of registration.
+    """
     return await register_user(response, user_data, db)
