@@ -5,13 +5,11 @@ Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
 import os
-from pathlib import Path
 
 from pwdlib import PasswordHash
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 
-from .config import Settings
 
 pwd = PasswordHash.recommended()
 
