@@ -15,9 +15,6 @@ from .config import Settings
 
 pwd = PasswordHash.recommended()
 
-PUBLIC_KEY = Path(Settings.PUBLIC_KEY_PATH).read_text()
-PRIVATE_KEY = Path(Settings.PRIVATE_KEY_PATH).read_text()
-
 
 def get_password_hash(password: str) -> str:
     """
@@ -40,7 +37,7 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     to_encode.update({"exp": expire, "type": "access"})
-    encode_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=os.getenv("ALGORITHM"))
+    encode_jwt = jwt.encode(to_encode, os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
     return encode_jwt
 
 def create_refresh_token(data: dict) -> str:
@@ -50,5 +47,5 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=30)
     to_encode.update({"exp": expire, "type": "refresh"})
-    encode_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=os.getenv("ALGORITHM"))
+    encode_jwt = jwt.encode(to_encode, os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
     return encode_jwt

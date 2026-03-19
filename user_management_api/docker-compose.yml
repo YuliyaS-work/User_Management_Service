@@ -3,7 +3,6 @@ services:
       image: postgres:17-alpine
       healthcheck:
         test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-#        test: "pg_isready -U ${DB_NAME} -h localhost"
         interval: 5s
         timeout: 5s
         retries: 20
@@ -41,11 +40,6 @@ services:
         - REDIS_PORT=${REDIS_PORT}
         - SECRET_KEY=${SECRET_KEY}
         - ALGORITHM=${ALGORITHM}
-        - JWT_PRVK_PATH=${JWT_PRVK_PATH}
-        - JWT_PBK_PATH=${JWT_PBK_PATH}
-      secrets:
-        - jwt_private
-        - jwt_public
       depends_on:
         db_ums:
           condition: service_healthy
@@ -53,11 +47,6 @@ services:
           condition: service_started
       ports:
         - "8000:8000"
-secrets:
-  jwt_private:
-    file: ./secrets/jwt_private.pem
-  jwt_public:
-    file: ./secrets/jwt_public.pem
 
 volumes:
   postgres-data:
