@@ -6,8 +6,9 @@ Initializes the FastAPI app and registers all API routers.
 
 from fastapi import FastAPI
 
+from src.user_management_api.routers.auth import auth_router
+
+
 app = FastAPI()
 
-@app.get("/healthcheck")
-async def healthcheck() -> dict:
-    return {"status": "ok"}
+app.include_router(auth_router)

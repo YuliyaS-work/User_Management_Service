@@ -1,8 +1,8 @@
 """init
 
-Revision ID: ea423b9298e1
+Revision ID: b31606662f82
 Revises: 
-Create Date: 2026-03-12 22:39:38.698623
+Create Date: 2026-03-17 14:48:59.812033
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlalchemy_utils
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'ea423b9298e1'
+revision: str = 'b31606662f82'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -30,8 +30,9 @@ def upgrade() -> None:
     )
     op.create_table('roles',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('role_name', sa.Enum('USER', 'ADMIN', 'MODERATOR', name='status_role', native_enum=False), server_default='user', nullable=False),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('role_name', sa.Enum('USER', 'ADMIN', 'MODERATOR', name='status_role', native_enum=False), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('role_name')
     )
     op.create_table('users',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -41,11 +42,11 @@ def upgrade() -> None:
     sa.Column('password', sa.String(length=255), nullable=False),
     sa.Column('phone_number', sqlalchemy_utils.types.phone_number.PhoneNumberType(length=20), nullable=True),
     sa.Column('email', sqlalchemy_utils.types.email.EmailType(length=255), nullable=False),
-    sa.Column('image_S3_path', sa.String(length=255), nullable=True),
+    sa.Column('image_s3_path', sa.String(length=255), nullable=True),
     sa.Column('is_blocked', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('modified_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('group_id', sa.Integer(), nullable=False),
+    sa.Column('group_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email'),
