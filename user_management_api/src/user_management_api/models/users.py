@@ -3,6 +3,7 @@ SQLAlchemy model for the User entity.
 
 Contains the User class mapped to the users table.
 """
+
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional

@@ -2,6 +2,7 @@
 Authentication module providing routers for user authentication,
 including sign-up, login, logout and token refresh operations.
 """
+
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 

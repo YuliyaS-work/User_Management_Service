@@ -4,12 +4,12 @@ Application security.
 Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
-import os
 
 from pwdlib import PasswordHash
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 
+from src.user_management_api.core.config import settings
 
 pwd = PasswordHash.recommended()
 
@@ -35,7 +35,7 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     to_encode.update({"exp": expire, "type": "access"})
-    encode_jwt = jwt.encode(to_encode, os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
+    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
 def create_refresh_token(data: dict) -> str:
@@ -45,5 +45,5 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=30)
     to_encode.update({"exp": expire, "type": "refresh"})
-    encode_jwt = jwt.encode(to_encode, os.getenv("SECRET_KEY"), algorithm=os.getenv("ALGORITHM"))
+    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt

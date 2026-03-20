@@ -1,12 +1,13 @@
 """Authentication module providing handlers for user authentication,
 including sign-up, login, logout and token refresh operations.
 """
+
 from fastapi import HTTPException, status, Response
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token
-from src.user_management_api.core.config import  Settings
+from src.user_management_api.core.config import  r
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import UserRegister
 from src.user_management_api.dao.user import UserDAO
@@ -71,6 +72,6 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     )
 
     # Set JWT refresh token in Redis.
-    Settings.r.set(f"refresh_token:{user_id}", f"{refresh_token}")
+    r.set(f"refresh_token:{user_id}", f"{refresh_token}")
 
     return {"message": "User registered successfully"}

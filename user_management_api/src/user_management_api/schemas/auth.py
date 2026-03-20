@@ -2,6 +2,7 @@
 Pydentic model used for user authentication, including sign-up and login.
 Provides validation are used for incoming authentication data.
 """
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.user_management_api.validators.auth import validate_phone_number, validate_password

@@ -1,6 +1,7 @@
 """
 Base class for Data Access Objects.
 """
+
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

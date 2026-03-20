@@ -3,6 +3,7 @@ SQLAlchemy model for the Group entity.
 
 Contains the Group class mapped to the groups table.
 """
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 

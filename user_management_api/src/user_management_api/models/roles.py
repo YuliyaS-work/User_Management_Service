@@ -3,6 +3,7 @@ SQLAlchemy model for the Role entity.
 
 Contains the Role class mapped to the roles table.
 """
+
 import enum
 from typing import TYPE_CHECKING
 

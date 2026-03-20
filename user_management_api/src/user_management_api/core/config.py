@@ -4,26 +4,29 @@ Application configuration settings.
 Defines global constants such as application name, debug mode,
 and database connection URL.
 """
-import os
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import redis
-from dotenv import load_dotenv
 
-load_dotenv()
-
-class Settings:
+class Settings(BaseSettings):
     """Global application configuration settings."""
-    APP_NAME: str = "user_management_api"
-    DEBUG: bool = True
-    DATABASE_URL: str = os.getenv("DATABASE_URL")
-    SECRET_KEY: str = os.getenv("SECRET_KEY")
-    PRIVATE_KEY_PATH = os.getenv("JWT_PRVK_PATH")
-    PUBLIC_KEY_PATH = os.getenv("JWT_PBK_PATH")
-    ALGORITHM: str = os.getenv("ALGORITHM")
+    app_name: str = "user_management_api"
+    debug: bool = True
+    database_url: str
+    secret_key: str
+    algorithm: str
 
-    r = redis.Redis(
-        host=os.getenv("REDIS_HOST"),
-        password=os.getenv("REDIS_PASSWORD"),
-        port=os.getenv("REDIS_PORT"),
-        decode_responses=True
+    redis_host: str
+    redis_port: int
+    redis_password: str
+
+    model_config = SettingsConfigDict(env_file=".env")
+
+settings = Settings()
+
+r = redis.Redis(
+    host=settings.redis_host,
+    password=settings.redis_password,
+    port=settings.redis_port,
+    decode_responses=True
     )
