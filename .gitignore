@@ -168,3 +168,5 @@ media/foto
 celerybeat-schedule.db
 
 # User_Managment_Service
+secrets/
+*.pem
