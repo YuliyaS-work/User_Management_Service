@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.db.session import get_session
-from src.user_management_api.schemas.auth import UserRegister
-from src.user_management_api.services.auth import register_user
+from src.user_management_api.models import User
+from src.user_management_api.schemas.auth import UserRegister, UserLogin
+from src.user_management_api.services.auth import register_user, login_user
 
 
 
@@ -32,3 +33,21 @@ async def register_user_item(
         dict: Message about success of registration.
     """
     return await register_user(response, user_data, db)
+
+
+@auth_router.post("/login")
+async def login_user_item(
+        response: Response,
+        user_data: UserLogin,
+        db: AsyncSession = Depends(get_session)
+) -> User | None:
+    """
+    Login a user.
+
+    Args:
+        user_data (UserRegister): Data required to login a user.
+        db (AsyncSession): Database session.
+    Returns:
+        : .
+    """
+    return await login_user(response, user_data, db)
