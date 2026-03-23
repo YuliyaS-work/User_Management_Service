@@ -4,6 +4,9 @@ Application security.
 Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
+import hashlib
+import uuid
+
 from fastapi import HTTPException, status, Response
 from pwdlib import PasswordHash
 from jose import jwt, JWTError
@@ -28,10 +31,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     return pwd.verify(plain_password, hashed_password)
 
+def get_token_hash(token: str) -> hash:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 def create_access_token(data: dict) -> str:
     """
-    Create a JWT access token using the PRIVATE_KEY.
+    Create a JWT access token using a secret_key and an algorithm.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -39,18 +44,22 @@ def create_access_token(data: dict) -> str:
     encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(data: dict) -> tuple:
     """
-    Create a JWT refresh token using the PRIVATE_KEY.
+    Create a JWT refresh token using a secret_key and an algorithm.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=30)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    jti = str(uuid.uuid4())
+    to_encode.update({"exp": expire, "type": "refresh", "jti": jti})
     encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encode_jwt
+    return encode_jwt, jti
 
 
 def decode_token(token: str) -> dict | None:
+    """
+        Decode a JWT refresh token using a secret_key and an algorithm.
+    """
     try:
         payload = jwt.decode(token, settings.secret_key, settings.algorithm)
         return payload
@@ -58,7 +67,10 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
-def validate_token(response: Response, payload: dict) -> str:
+def validate_access_token(response: Response, payload: dict) -> str:
+    """
+    Validate provided JWT access token.
+    """
     if not payload:
         delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
@@ -74,11 +86,41 @@ def validate_token(response: Response, payload: dict) -> str:
         delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
 
+    return user_id
+
+
+def validate_refresh_token(response: Response, payload: dict, hash_token: hash):
+    """
+    Validate provided JWT refresh token.
+    """
+    if not payload:
+        delete_tokens_from_cookies(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
+
     jti = payload.get("jti")
-    if r.get(f"revoked_token::{jti}"):
+    user_id = payload.get("sub")
+
+    if r.get(f"revoked_token:{jti}"):
         delete_tokens_from_cookies(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked"
         )
-    return user_id
+
+    stored_jti = r.get(f"revoked_token:{jti}")
+    if stored_jti:
+        delete_tokens_from_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is revoked"
+        )
+
+    saved_hash =r.get(f"refresh_token:{user_id}:{jti}")
+    if hash_token != saved_hash:
+        delete_tokens_from_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is not current"
+        )
+
+    return user_id, jti

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import UserRegister, UserLogin
 from src.user_management_api.services.auth import register_user, login_user, logout_user, renew_tokens
-from src.user_management_api.utils.auth import get_access_token_from_cookie
+from src.user_management_api.utils.auth import get_refresh_token_from_cookie
 
 auth_router = APIRouter(prefix="/auth")
 
@@ -55,31 +55,28 @@ async def login_user_item(
 @auth_router.post("/logout")
 def logout_user_item(
         response: Response,
-        token: str = Depends(get_access_token_from_cookie)
+        request: Request
 ) -> dict:
     """
     Log out a user.
 
     Args:
         response (Response): save JWT tokens in cookies.
-       token: access token from cookie.
+        request (Request): get JWT tokens from cookies.
     Returns:
         dict: Message about success of log out.
     """
-    return logout_user(response, token)
+    return logout_user(response, request)
 
 @auth_router.post("/refresh-token")
-def renew_tokens_item(
-        request: Request,
-        response: Response
-) -> tuple:
+def renew_tokens_item( request: Request, response: Response) -> dict:
     """
-        Renew a couple JWT tokens with old refresh token.
+    Renew a couple JWT tokens with old refresh token.
 
-        Args:
-            response (Response): save JWT tokens in cookies.
-            request: access token from cookie.
-        Returns:
-            tuple: access and refresh tokens.
-        """
+    Args:
+        response (Response): save JWT tokens in cookies.
+        request: access token from cookies.
+    Returns:
+        dict: access and refresh tokens.
+    """
     return renew_tokens(request, response)
