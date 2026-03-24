@@ -36,7 +36,15 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
     """
-        Schema for login a user.
+    Schema for login a user.
     """
     login: str = Field(..., description="Login may be username, phone number or email")
     password: str = Field(..., min_length=8, max_length=64, description="Password must be between 8 and 20 characters long.")
+
+
+class TokenResponse(BaseModel):
+    """
+    Schema for token response.
+    """
+    access_token: str
+    refresh_token: str

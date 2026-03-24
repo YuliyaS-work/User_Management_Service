@@ -72,52 +72,52 @@ def validate_access_token(response: Response, payload: dict) -> str:
     Validate provided JWT access token.
     """
     if not payload:
-        delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
 
+    # Check expire time  for access token.
     expire = payload.get('exp')
     expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
     if (not expire) or (expire_time < datetime.now(timezone.utc)):
-        delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is over")
 
+    # Check ID user to ensure that it's authentic
     user_id = payload.get('sub')
     if not user_id:
-        delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
 
     return user_id
 
 
-def validate_refresh_token(response: Response, payload: dict, hash_token: hash):
+async def validate_refresh_token(response: Response, payload: dict, hash_token: hash):
     """
     Validate provided JWT refresh token.
     """
     if not payload:
-        delete_tokens_from_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
 
     jti = payload.get("jti")
-    user_id = payload.get("sub")
+    expire = payload.get('exp')
+    user_id = payload.get('sub')
+    saved_hash = await r.get(f"refresh_token:{user_id}:{jti}")
 
-    if r.get(f"revoked_token:{jti}"):
-        delete_tokens_from_cookies(response)
+    # Check expire time  for refresh token.
+    expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
+    if (not expire) or (expire_time < datetime.now(timezone.utc)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is over")
+
+    # Check ID user to ensure that it's authentic
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
+
+    # Check refresh token in blacklist.
+    if await r.get(f"revoked_token:{jti}"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked"
         )
 
-    stored_jti = r.get(f"revoked_token:{jti}")
-    if stored_jti:
-        delete_tokens_from_cookies(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token is revoked"
-        )
-
-    saved_hash =r.get(f"refresh_token:{user_id}:{jti}")
+    # Check hash of a provided refresh token with hash in redis.
     if hash_token != saved_hash:
-        delete_tokens_from_cookies(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token is not current"
