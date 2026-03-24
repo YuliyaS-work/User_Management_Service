@@ -9,7 +9,7 @@ from src.user_management_api.models import User
 
 
 class BaseDAO:
-    model=None
+    model: None
 
     @classmethod
     async def find_one_or_none(cls, db: AsyncSession, where=None,  **filters) -> User | None:

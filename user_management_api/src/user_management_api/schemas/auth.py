@@ -5,7 +5,7 @@ Provides validation are used for incoming authentication data.
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from src.user_management_api.validators.auth import validate_phone_number, validate_password
+from src.user_management_api.validators.auth import validate_phone_number_signup, validate_password
 
 
 class UserRegister(BaseModel):
@@ -20,14 +20,14 @@ class UserRegister(BaseModel):
     email: EmailStr = Field(..., description="Email")
 
     @field_validator("phone_number")
-    def validate_phone_number_reg(cls, value) -> str | None:
+    def validate_phone_number_reg(cls, value: str | None) -> str | None:
         """
         Validate provided phone number.
         """
-        return validate_phone_number(value)
+        return validate_phone_number_signup(value)
 
     @field_validator("password")
-    def validate_password_reg(cls, value) -> str:
+    def validate_password_reg(cls, value: str) -> str:
         """
         Validate provided password.
         """

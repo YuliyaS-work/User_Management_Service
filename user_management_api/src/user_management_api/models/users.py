@@ -30,7 +30,7 @@ class User(Base):
     surname: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     username: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone_number: Mapped[Optional[PhoneNumber]] = mapped_column(PhoneNumberType(), nullable=True)
+    phone_number: Mapped[Optional[PhoneNumber]] = mapped_column(PhoneNumberType(), nullable=True, unique=True)
     email: Mapped[str]= mapped_column(EmailType(), nullable=False, unique=True)
     image_s3_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -51,7 +51,7 @@ def send_tokens_to_user(response: Response, access_token: str, refresh_token: st
     )
 
 
-def delete_tokens_from_cookies(response):
+def delete_tokens_from_cookies(response: Response) -> None:
     """
     Delete tokens from cookies.
     """

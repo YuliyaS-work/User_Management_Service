@@ -57,7 +57,7 @@ async def login_user_item(
 async def logout_user_item(
         response: Response,
         request: Request
-) -> dict | JSONResponse:
+) -> dict[str, str] | JSONResponse:
     """
     Log out a user.
 

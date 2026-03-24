@@ -20,7 +20,7 @@ from src.user_management_api.utils.auth import send_tokens_to_user, delete_token
 from src.user_management_api.core.config import r
 
 
-async def create_and_store_tokens(user_id) -> tuple:
+async def create_and_store_tokens(user_id: str) -> tuple[str, str]:
     access_token = create_access_token({"sub": user_id})
     refresh_token, jti = create_refresh_token({"sub": user_id})
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
@@ -34,7 +34,7 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
     await r.set(f"revoked_token:{jti}", "true")
 
 
-async def save_refresh_token_to_redis(refresh_token, jti, user_id) -> str:
+async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> str:
     """
     Save refresh token hash to redis.
     """
@@ -44,7 +44,7 @@ async def save_refresh_token_to_redis(refresh_token, jti, user_id) -> str:
     return refresh_token
 
 
-async def verify_refresh_token_and_delete(response: Response, request: Request) -> tuple:
+async def verify_refresh_token_and_delete(response: Response, request: Request) -> tuple[str, str]:
     """
     Verify refresh token from cookies to one stored in redis.
     """
@@ -66,21 +66,22 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     Returns:
         TokenResponse: An access and refresh tokens.
     """
-    # Check that email and username are unique.
-    user = await UserDAO.find_one_or_none(
-        db,
-        or_(User.username == user_data.username, User.email == user_data.email)
-    )
-    if user:
-        if user.username == user_data.username:
+    # Compare the data in login field with email, username and phone number in the database.
+    if await UserDAO.find_one_or_none(db, User.username == user_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already exists"
+        )
+    if await UserDAO.find_one_or_none(db, User.email == user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already exists"
+        )
+    if user_data.phone_number:
+        if await UserDAO.find_one_or_none(db, User.phone_number == user_data.phone_number):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Username already exists"
-            )
-        if user.email == user_data.email:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already exists"
+                detail="Phone number already exists"
             )
     # Get a dictionary of instance.
     user_dict = user_data.model_dump()
@@ -121,8 +122,10 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
 
     # Avoid strict correspondence of email and username with PhoneNumber type.
     try:
-        phonenumbers.parse(user_data.login)
-        filters.append(User.phone_number == user_data.login)
+        parsed_phone = phonenumbers.parse(user_data.login, None)
+        if phonenumbers.is_valid_number(parsed_phone):
+            normalized_phone = phonenumbers.format_number(parsed_phone, phonenumbers.PhoneNumberFormat.E164)
+            filters.append(User.phone_number == normalized_phone)
     except NumberParseException:
         pass
 
@@ -160,7 +163,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
 async def logout_user(
         response: Response,
         request: Request,
-) -> dict | JSONResponse:
+) -> dict[str, str] | JSONResponse:
     """
     Log out a user.
 

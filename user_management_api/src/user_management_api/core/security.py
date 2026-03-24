@@ -6,6 +6,7 @@ and generating access and refresh tokens.
 """
 import hashlib
 import uuid
+from typing import Any
 
 from fastapi import HTTPException, status, Response
 from pwdlib import PasswordHash
@@ -31,10 +32,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     return pwd.verify(plain_password, hashed_password)
 
-def get_token_hash(token: str) -> hash:
+def get_token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict[str, Any]) -> str:
     """
     Create a JWT access token using a secret_key and an algorithm.
     """
@@ -44,7 +45,7 @@ def create_access_token(data: dict) -> str:
     encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
-def create_refresh_token(data: dict) -> tuple:
+def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     """
     Create a JWT refresh token using a secret_key and an algorithm.
     """
@@ -56,7 +57,7 @@ def create_refresh_token(data: dict) -> tuple:
     return encode_jwt, jti
 
 
-def decode_token(token: str) -> dict | None:
+def decode_token(token: str) -> dict[str, Any] | None:
     """
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
@@ -67,7 +68,7 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
-def validate_access_token(response: Response, payload: dict) -> str:
+def validate_access_token(response: Response, payload: dict[str, Any] | None) -> str:
     """
     Validate provided JWT access token.
     """
@@ -88,7 +89,7 @@ def validate_access_token(response: Response, payload: dict) -> str:
     return user_id
 
 
-async def validate_refresh_token(response: Response, payload: dict, hash_token: hash):
+async def validate_refresh_token(response: Response, payload: dict[str, Any] | None, hash_token: str) -> tuple[str, str]:
     """
     Validate provided JWT refresh token.
     """

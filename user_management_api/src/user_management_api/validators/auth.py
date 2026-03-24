@@ -5,20 +5,26 @@ Provides validation are used for incoming data.
 
 import re
 
+import phonenumbers
+from phonenumbers.phonenumberutil import NumberParseException
 from pydantic_core import PydanticCustomError
 
 
-def validate_phone_number(value: str) -> str | None:
+def validate_phone_number_signup(value: str | None) -> str | None:
     """
-    Validate a phone number to an international standart form.
+    Validate a phone number to an international standart form in signup.
     """
-    if value:
-        if not re.match(r'^\+\d{10,17}$', value):
-            raise ValueError(
-                "phone_number_invalid",
-                "Phone number must start with '+'  and contain between 10 and 17 digits."
-            )
-    return value
+    if value is None or value.strip() == "":
+        return None
+
+    try:
+        parsed_phone = phonenumbers.parse(value, None)
+        if not phonenumbers.is_valid_number(parsed_phone):
+            raise ValueError("Invalid phone number")
+        return phonenumbers.format_number(parsed_phone, phonenumbers.PhoneNumberFormat.E164)
+    except NumberParseException:
+        raise ValueError("Invalid phone number format")
+
 
 
 def validate_password(value: str) -> str:
