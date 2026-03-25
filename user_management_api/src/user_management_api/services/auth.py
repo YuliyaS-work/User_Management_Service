@@ -21,10 +21,14 @@ from src.user_management_api.core.config import r
 
 
 async def create_and_store_tokens(user_id: str) -> tuple[str, str]:
+    """
+    Create JWT tokens and put refresh token in redis.
+    """
     access_token = create_access_token({"sub": user_id})
     refresh_token, jti = create_refresh_token({"sub": user_id})
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
     return access_token, refresh_token
+
 
 async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
     """
@@ -129,6 +133,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
     except NumberParseException:
         pass
 
+    # Get the user from the database with filters.
     user = await UserDAO.find_one_or_none(db, or_(*filters))
     if not user:
         raise HTTPException(
@@ -174,6 +179,7 @@ async def logout_user(
         dict: Message about success of log out.
         JSONResponse: A refresh token is invalid.
     """
+    # Verify refresh token from cookies and move it to the blacklist.
     try:
         user_id, jti = await verify_refresh_token_and_delete(response, request)
         await delete_refresh_token_from_redis(user_id, jti)
@@ -185,6 +191,7 @@ async def logout_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content= {"detail": str(e)}
         )
+
     finally:
         delete_tokens_from_cookies(response)
 
@@ -203,7 +210,7 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse | 
         JSONResponse: A refresh token is invalid.
     """
     try:
-        # Verify a refresh token and delete from redis.
+        # Verify a refresh token and move it to the blacklist.
         user_id, jti = await verify_refresh_token_and_delete(response, request)
         await delete_refresh_token_from_redis(user_id, jti)
 
@@ -223,4 +230,5 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse | 
             content= {"detail": str(e)}
         )
         delete_tokens_from_cookies(response)
+
         return response_refresh
