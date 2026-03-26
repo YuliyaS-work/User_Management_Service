@@ -57,7 +57,7 @@ async def login_user_item(
 async def logout_user_item(
         response: Response,
         request: Request
-) -> dict[str, str] | JSONResponse:
+) -> dict[str, str]:
     """
     Log out a user.
 
@@ -66,13 +66,12 @@ async def logout_user_item(
         request (Request): get JWT tokens from cookies.
     Returns:
         dict: Message about success of log out.
-        JSONResponse: A refresh token is invalid.
     """
     return await logout_user(response, request)
 
 
 @auth_router.post("/refresh-token", response_model=TokenResponse)
-async def renew_tokens_item( request: Request, response: Response) -> TokenResponse | JSONResponse:
+async def renew_tokens_item( request: Request, response: Response) -> TokenResponse:
     """
     Renew a couple JWT tokens with old refresh token.
 
@@ -81,6 +80,5 @@ async def renew_tokens_item( request: Request, response: Response) -> TokenRespo
         request: access token from cookies.
     Returns:
         TokenResponse: access and refresh tokens.
-        JSONResponse: A refresh token is invalid
     """
     return await renew_tokens(request, response)

@@ -48,3 +48,13 @@ class TokenResponse(BaseModel):
     """
     access_token: str
     refresh_token: str
+
+
+class PayLoad(BaseModel):
+    """
+    Schema for token payload.
+    """
+    sub: str
+    exp: int
+    type: str
+    jti: str

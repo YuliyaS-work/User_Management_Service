@@ -14,7 +14,8 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
 from src.user_management_api.core.config import settings, r
-from src.user_management_api.utils.auth import delete_tokens_from_cookies
+from src.user_management_api.exceptions.auth import AuthenticationException
+from src.user_management_api.schemas.auth import PayLoad
 
 pwd = PasswordHash.recommended()
 
@@ -57,44 +58,45 @@ def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     return encode_jwt, jti
 
 
-def decode_token(token: str) -> dict[str, Any] | None:
+def decode_token(token: str) -> PayLoad | None:
     """
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
     try:
-        payload = jwt.decode(token, settings.secret_key, settings.algorithm)
+        payload_decoded = jwt.decode(token, settings.secret_key, settings.algorithm)
+        payload = PayLoad(**payload_decoded)
         return payload
     except JWTError:
         return None
 
 
-def validate_access_token(response: Response, payload: dict[str, Any] | None) -> str:
+def validate_access_token(payload: PayLoad | None) -> str:
     """
     Validate provided JWT access token.
     """
     if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
+        raise AuthenticationException(detail="Token invalid")
 
     # Check expire time  for access token.
     expire = payload.get('exp')
     expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
     if (not expire) or (expire_time < datetime.now(timezone.utc)):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is over")
+        raise AuthenticationException(detail="Token is over")
 
     # Check ID user to ensure that it's authentic
     user_id = payload.get('sub')
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
+        raise AuthenticationException(detail="User ID not found")
 
     return user_id
 
 
-async def validate_refresh_token(response: Response, payload: dict[str, Any] | None, hash_token: str) -> tuple[str, str]:
+async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> tuple[str, str]:
     """
     Validate provided JWT refresh token.
     """
     if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalid")
+        raise AuthenticationException(detail="Token invalid")
 
     jti = payload.get("jti")
     expire = payload.get('exp')
@@ -104,24 +106,18 @@ async def validate_refresh_token(response: Response, payload: dict[str, Any] | N
     # Check expire time  for refresh token.
     expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
     if (not expire) or (expire_time < datetime.now(timezone.utc)):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is over")
+        raise AuthenticationException(detail="Token is over")
 
     # Check ID user to ensure that it's authentic
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
+        raise AuthenticationException(detail="User ID not found")
 
     # Check refresh token in blacklist.
     if await r.get(f"revoked_token:{jti}"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked"
-        )
+        raise AuthenticationException(detail="Token has been revoked")
 
     # Check hash of a provided refresh token with hash in redis.
     if hash_token != saved_hash:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token is not current"
-        )
+        raise AuthenticationException(detail="Token is not current")
 
     return user_id, jti

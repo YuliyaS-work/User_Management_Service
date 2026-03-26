@@ -4,14 +4,14 @@ including sign-up, login, logout and token refresh operations.
 from datetime import timedelta
 
 import phonenumbers
-from fastapi import HTTPException, status, Response, Request
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Response, Request
 from phonenumbers.phonenumberutil import NumberParseException
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
     verify_password, decode_token, validate_refresh_token, get_token_hash
+from src.user_management_api.exceptions.auth import ConflictException
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse
 from src.user_management_api.dao.user import UserDAO
@@ -72,21 +72,15 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     """
     # Compare the data in login field with email, username and phone number in the database.
     if await UserDAO.find_one_or_none(db, User.username == user_data.username):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username already exists"
-        )
+        raise ConflictException(detail="Username already exists")
+
     if await UserDAO.find_one_or_none(db, User.email == user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already exists"
-        )
+        raise ConflictException(detail="Email already exists")
+
     if user_data.phone_number:
         if await UserDAO.find_one_or_none(db, User.phone_number == user_data.phone_number):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Phone number already exists"
-            )
+            raise ConflictException(detail="Phone number already exists")
+
     # Get a dictionary of instance.
     user_dict = user_data.model_dump()
 
@@ -136,10 +130,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
     # Get the user from the database with filters.
     user = await UserDAO.find_one_or_none(db, or_(*filters))
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User's not found."
-        )
+        raise ConflictException(detail="User's not found.")
 
     # Get a password.
     password_db = user.password
@@ -147,10 +138,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
     verification = verify_password(user_data.password, password_db)
 
     if not verification:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Password's not correct for {user.username}"
-        )
+        raise ConflictException(detail=f"Password's not correct for {user.username}")
 
     # UUID to string for JSON serialization to get tokens.
     user_id = str(user.id)
@@ -168,7 +156,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
 async def logout_user(
         response: Response,
         request: Request,
-) -> dict[str, str] | JSONResponse:
+) -> dict[str, str]:
     """
     Log out a user.
 
@@ -177,7 +165,6 @@ async def logout_user(
         request (Request): get JWT tokens from cookies.
     Returns:
         dict: Message about success of log out.
-        JSONResponse: A refresh token is invalid.
     """
     # Verify refresh token from cookies and move it to the blacklist.
     try:
@@ -187,10 +174,7 @@ async def logout_user(
 
     # Raise an exception if a token is invalid.
     except HTTPException as e:
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content= {"detail": str(e)}
-        )
+        raise ConflictException(e.detail)
 
     finally:
         delete_tokens_from_cookies(response)
@@ -198,7 +182,7 @@ async def logout_user(
 
 
 
-async def renew_tokens(request: Request, response: Response) -> TokenResponse | JSONResponse:
+async def renew_tokens(request: Request, response: Response) -> TokenResponse:
     """
     Renew JWT tokens with an old refresh_token.
 
@@ -207,7 +191,6 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse | 
         request (Request): get JWT tokens from cookies.
     Returns:
         TokenResponse: An access and refresh tokens.
-        JSONResponse: A refresh token is invalid.
     """
     try:
         # Verify a refresh token and move it to the blacklist.
@@ -225,10 +208,5 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse | 
 
     # Raise an exception if a token is invalid.
     except HTTPException as e:
-        response_refresh = JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content= {"detail": str(e)}
-        )
         delete_tokens_from_cookies(response)
-
-        return response_refresh
+        raise ConflictException(e.detail)
