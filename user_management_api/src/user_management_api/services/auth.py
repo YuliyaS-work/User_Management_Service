@@ -1,6 +1,8 @@
-"""Authentication module providing handlers for user authentication,
+"""
+Authentication module providing handlers for user authentication,
 including sign-up, login, logout and token refresh operations.
 """
+
 from datetime import timedelta
 
 import phonenumbers

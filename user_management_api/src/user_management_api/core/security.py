@@ -68,7 +68,7 @@ def decode_token(token: str) -> dict[str, Any] | None:
         return None
 
 
-def validate_access_token(response: Response, payload: dict[str, Any] | None) -> str:
+def validate_access_token( payload: dict[str, Any] | None) -> str:
     """
     Validate provided JWT access token.
     """
