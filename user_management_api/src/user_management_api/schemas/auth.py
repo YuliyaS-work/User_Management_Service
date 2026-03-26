@@ -1,6 +1,6 @@
 """
-Pydentic model used for user authentication, including sign-up and login.
-Provides validation are used for incoming authentication data.
+Pydantic model used for user authentication, including sign-up and login.
+Provides validation are used for incoming and outgoing authentication data.
 """
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -58,3 +58,10 @@ class PayLoad(BaseModel):
     exp: int
     type: str
     jti: str
+
+
+class APIErrorResponse(BaseModel):
+    """
+    Schema for error response returned by the API.
+    """
+    detail: str

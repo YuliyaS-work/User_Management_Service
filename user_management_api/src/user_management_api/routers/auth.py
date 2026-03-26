@@ -4,13 +4,11 @@ including sign-up, login, logout and token refresh operations.
 """
 
 from fastapi import APIRouter, Depends, Response, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse
 from src.user_management_api.services.auth import register_user, login_user, logout_user, renew_tokens
-from src.user_management_api.utils.auth import get_refresh_token_from_cookie
 
 auth_router = APIRouter(prefix="/auth")
 
@@ -36,6 +34,7 @@ async def register_user_item(
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def login_user_item(
+        request: Request,
         response: Response,
         user_data: UserLogin,
         db: AsyncSession = Depends(get_session)
@@ -50,7 +49,7 @@ async def login_user_item(
     Returns:
         TokenResponse: an access and refresh tokens.
     """
-    return await login_user(response, user_data, db)
+    return await login_user(request, response, user_data, db)
 
 
 @auth_router.post("/logout", response_model=None, status_code=201)

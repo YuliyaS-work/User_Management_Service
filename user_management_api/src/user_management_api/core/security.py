@@ -78,13 +78,13 @@ def validate_access_token(payload: PayLoad | None) -> str:
         raise AuthenticationException(detail="Token invalid")
 
     # Check expire time  for access token.
-    expire = payload.get('exp')
+    expire = payload.exp
     expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
     if (not expire) or (expire_time < datetime.now(timezone.utc)):
         raise AuthenticationException(detail="Token is over")
 
     # Check ID user to ensure that it's authentic
-    user_id = payload.get('sub')
+    user_id = payload.sub
     if not user_id:
         raise AuthenticationException(detail="User ID not found")
 
@@ -98,10 +98,10 @@ async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> t
     if not payload:
         raise AuthenticationException(detail="Token invalid")
 
-    jti = payload.get("jti")
-    expire = payload.get('exp')
-    user_id = payload.get('sub')
-    saved_hash = await r.get(f"refresh_token:{user_id}:{jti}")
+    jti = payload.jti
+    expire = payload.exp
+    user_id = payload.sub
+    saved_hash = await r.get(f"refresh_token:{user_id}")
 
     # Check expire time  for refresh token.
     expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
@@ -113,7 +113,7 @@ async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> t
         raise AuthenticationException(detail="User ID not found")
 
     # Check refresh token in blacklist.
-    if await r.get(f"revoked_token:{jti}"):
+    if await r.get(f"revoked_token:{user_id}:{jti}"):
         raise AuthenticationException(detail="Token has been revoked")
 
     # Check hash of a provided refresh token with hash in redis.

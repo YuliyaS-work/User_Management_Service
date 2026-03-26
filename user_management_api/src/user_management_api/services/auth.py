@@ -1,6 +1,8 @@
-"""Authentication module providing handlers for user authentication,
+"""
+Authentication module providing handlers for user authentication,
 including sign-up, login, logout and token refresh operations.
 """
+
 from datetime import timedelta
 
 import phonenumbers
@@ -11,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
     verify_password, decode_token, validate_refresh_token, get_token_hash
-from src.user_management_api.exceptions.auth import ConflictException
+from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse
 from src.user_management_api.dao.user import UserDAO
@@ -34,8 +36,8 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
     """
     Delete refresh token hash and indicate jti of the refresh token is "revoked".
     """
-    await r.delete(f"refresh_token:{user_id}:{jti}")
-    await r.set(f"revoked_token:{jti}", "true")
+    await r.delete(f"refresh_token:{user_id}")
+    await r.set(f"revoked_token:{user_id}:{jti}", "true")
 
 
 async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> str:
@@ -44,18 +46,18 @@ async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str
     """
     token_hash = get_token_hash(refresh_token)
     ttl = timedelta(days=30)
-    refresh_token = await r.setex(f"refresh_token:{user_id}:{jti}", int(ttl.total_seconds()), token_hash)
+    refresh_token = await r.setex(f"refresh_token:{user_id}", int(ttl.total_seconds()), token_hash)
     return refresh_token
 
 
-async def verify_refresh_token_and_delete(response: Response, request: Request) -> tuple[str, str]:
+async def verify_refresh_token_and_delete(request: Request) -> tuple[str, str]:
     """
     Verify refresh token from cookies to one stored in redis.
     """
     old_refresh_token = get_refresh_token_from_cookie(request)
     payload = decode_token(old_refresh_token)
     hash_token = get_token_hash(old_refresh_token)
-    user_id, jti = await validate_refresh_token(response, payload, hash_token)
+    user_id, jti = await validate_refresh_token(payload, hash_token)
     return user_id, jti
 
 
@@ -104,7 +106,7 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     )
 
 
-async def login_user(response: Response, user_data: UserLogin, db: AsyncSession) -> TokenResponse:
+async def login_user(request: Request, response: Response, user_data: UserLogin, db: AsyncSession) -> TokenResponse:
     """
     Check a user and login.
 
@@ -130,7 +132,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
     # Get the user from the database with filters.
     user = await UserDAO.find_one_or_none(db, or_(*filters))
     if not user:
-        raise ConflictException(detail="User's not found.")
+        raise AuthenticationException(detail="User's not found.")
 
     # Get a password.
     password_db = user.password
@@ -138,7 +140,7 @@ async def login_user(response: Response, user_data: UserLogin, db: AsyncSession)
     verification = verify_password(user_data.password, password_db)
 
     if not verification:
-        raise ConflictException(detail=f"Password's not correct for {user.username}")
+        raise AuthenticationException(detail=f"Password's not correct for {user.username}")
 
     # UUID to string for JSON serialization to get tokens.
     user_id = str(user.id)
@@ -168,18 +170,11 @@ async def logout_user(
     """
     # Verify refresh token from cookies and move it to the blacklist.
     try:
-        user_id, jti = await verify_refresh_token_and_delete(response, request)
+        user_id, jti = await verify_refresh_token_and_delete(request)
         await delete_refresh_token_from_redis(user_id, jti)
         return {"message": "User logged out"}
-
-    # Raise an exception if a token is invalid.
-    except HTTPException as e:
-        raise ConflictException(e.detail)
-
     finally:
         delete_tokens_from_cookies(response)
-
-
 
 
 async def renew_tokens(request: Request, response: Response) -> TokenResponse:
@@ -194,7 +189,7 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse:
     """
     try:
         # Verify a refresh token and move it to the blacklist.
-        user_id, jti = await verify_refresh_token_and_delete(response, request)
+        user_id, jti = await verify_refresh_token_and_delete(request)
         await delete_refresh_token_from_redis(user_id, jti)
 
         # Create tokens, set tokens in cookies and a refresh token in redis.
@@ -205,8 +200,6 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse:
             access_token=new_access_token,
             refresh_token=new_refresh_token
         )
-
-    # Raise an exception if a token is invalid.
-    except HTTPException as e:
+    except APIException:
         delete_tokens_from_cookies(response)
-        raise ConflictException(e.detail)
+        raise
