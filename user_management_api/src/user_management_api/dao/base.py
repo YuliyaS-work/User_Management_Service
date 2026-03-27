@@ -1,6 +1,7 @@
 """
 Base class for Data Access Objects.
 """
+import uuid
 
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,3 +37,15 @@ class BaseDAO:
         db.add(new_instance)
         await db.flush()
         return new_instance
+
+    @classmethod
+    async def delete_one_by_id(cls, user_id: str, db: AsyncSession, **values) -> None:
+        """
+        Delete an instance to the session without commiting.
+        """
+        user_id = uuid.UUID(user_id)
+        instance = await db.get(cls.model, user_id)
+        if instance:
+            await db.delete(instance)
+            await db.flush()
+        return None

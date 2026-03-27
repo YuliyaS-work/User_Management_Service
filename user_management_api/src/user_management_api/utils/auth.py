@@ -1,5 +1,7 @@
 from fastapi import HTTPException, status, Response, Request
 
+from src.user_management_api.exceptions.auth import AuthenticationException
+
 
 def get_access_token_from_cookie(request: Request) -> str:
     """
@@ -7,10 +9,7 @@ def get_access_token_from_cookie(request: Request) -> str:
     """
     access_token = request.cookies.get("user_access_token")
     if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token not found"
-        )
+        raise AuthenticationException(detail="Access token not found")
     return access_token
 
 
@@ -20,10 +19,7 @@ def get_refresh_token_from_cookie(request: Request) -> str:
     """
     refresh_token = request.cookies.get("user_refresh_token")
     if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token not found"
-        )
+        raise AuthenticationException(detail="Refresh token not found")
     return refresh_token
 
 
