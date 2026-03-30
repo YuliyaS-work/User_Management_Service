@@ -10,6 +10,9 @@ from alembic import context
 from src.user_management_api.core.config import settings
 from src.user_management_api.models import base
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

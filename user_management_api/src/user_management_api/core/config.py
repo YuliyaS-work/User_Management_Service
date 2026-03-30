@@ -4,9 +4,9 @@ Application configuration settings.
 Defines global constants such as application name, debug mode,
 and database connection URL.
 """
-
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import redis
+from redis.asyncio import Redis
 
 class Settings(BaseSettings):
     """Global application configuration settings."""
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-r = redis.Redis(
+r = Redis(
     host=settings.redis_host,
     password=settings.redis_password,
     port=settings.redis_port,
