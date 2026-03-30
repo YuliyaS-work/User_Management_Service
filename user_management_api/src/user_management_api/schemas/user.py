@@ -2,18 +2,69 @@
 Pydentic model used for getting user information.
 Provides validation are used for incoming data.
 """
+from datetime import datetime
+from typing import Any
+from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+import phonenumbers
+from pydantic import BaseModel, field_validator, ConfigDict, field_serializer
+
+from src.user_management_api.validators.auth import validate_phone_number_signup
 
 
-class ProfileUserResponse(BaseModel):
+class ProfileUserGet(BaseModel):
     """
     Schema for getting the profile information.
     """
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     surname: str
     username: str
     phone_number: str | None
     email: str
-    image: str | None
+    image_s3_path: str | None
     group_name: str
+
+
+class ProfileUserPatch(BaseModel):
+    """
+    Schema for patching the profile information.
+    """
+    name: str | None = None
+    surname: str | None = None
+    username: str | None = None
+    phone_number: str | None = None
+    email: str | None = None
+    image_s3_path: str | None = None
+
+    @field_validator("phone_number")
+    def validate_phone_number_reg(cls, value: str | None) -> str | None:
+        """
+        Validate provided phone number.
+        """
+        return validate_phone_number_signup(value)
+
+class ProfileUserResponse(BaseModel):
+    """
+    Schema for patching the profile information.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    surname: str
+    username: str
+    phone_number: Any | None
+    email: str
+    image_s3_path: str | None
+    is_blocked: bool
+    created_at: datetime
+    modified_at: datetime
+    group_id: int | None
+
+    @field_serializer("phone_number")
+    def serialize_phone_number(self, value):
+        if value is None:
+            return None
+        return phonenumbers.format_number(value, phonenumbers.PhoneNumberFormat.E164)

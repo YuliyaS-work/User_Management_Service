@@ -1,6 +1,21 @@
-from fastapi import HTTPException, status, Response, Request
+from fastapi import Response, Request, Header
 
 from src.user_management_api.exceptions.auth import AuthenticationException
+
+
+# def get_access_token_from_header(authorization: str = Header(None)) -> str:
+#     if not authorization:
+#         raise AuthenticationException("Missing authorization header.")
+#
+#     try:
+#         scheme, access_token = authorization.split()
+#     except ValueError:
+#         raise AuthenticationException("Invalid authorization header format.")
+#
+#     if scheme.lower() != "bearer":
+#         raise AuthenticationException("Invalid auth scheme")
+#
+#     return access_token
 
 
 def get_access_token_from_cookie(request: Request) -> str:

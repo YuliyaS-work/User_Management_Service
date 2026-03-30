@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
 class StatusRole(enum.Enum):
     """Model for choice of role value."""
-    USER = "user"
-    ADMIN = "admin"
-    MODERATOR = "moderator"
+    USER = "USER"
+    ADMIN = "ADMIN"
+    MODERATOR = "MODERATOR"
 
 
 class Role(Base):

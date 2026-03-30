@@ -2,6 +2,7 @@
 Base class for Data Access Objects.
 """
 import uuid
+from typing import Any
 
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,13 +40,27 @@ class BaseDAO:
         return new_instance
 
     @classmethod
-    async def delete_one_by_id(cls, user_id: str, db: AsyncSession, **values) -> None:
+    async def delete_by_id(cls, db: AsyncSession, user_id: str) -> None:
         """
         Delete an instance to the session without commiting.
         """
         user_id = uuid.UUID(user_id)
         instance = await db.get(cls.model, user_id)
-        if instance:
-            await db.delete(instance)
-            await db.flush()
+        await db.delete(instance)
+        await db.flush()
         return None
+
+    @classmethod
+    async def patch_by_id(cls,db: AsyncSession, user_id: str, data: dict[str, Any] ):
+        """
+        Delete an instance to the session without commiting.
+        """
+        user_id = uuid.UUID(user_id)
+        renew_instance = await db.get(cls.model, user_id)
+
+        for field, value in data.items():
+            setattr(renew_instance, field, value)
+
+        await db.flush()
+        await db.refresh(renew_instance)
+        return renew_instance
