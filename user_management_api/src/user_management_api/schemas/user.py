@@ -10,6 +10,7 @@ import phonenumbers
 from pydantic import BaseModel, field_validator, ConfigDict, field_serializer
 
 from src.user_management_api.validators.auth import validate_phone_number_signup
+from src.user_management_api.validators.user import serialize_phone
 
 
 class ProfileUserGet(BaseModel):
@@ -21,10 +22,14 @@ class ProfileUserGet(BaseModel):
     name: str
     surname: str
     username: str
-    phone_number: str | None
+    phone_number: Any | None
     email: str
     image_s3_path: str | None
     group_name: str
+
+    @field_serializer("phone_number")
+    def serialize_phone_number(self, value):
+        return serialize_phone(self, value)
 
 
 class ProfileUserPatch(BaseModel):
@@ -65,6 +70,4 @@ class ProfileUserResponse(BaseModel):
 
     @field_serializer("phone_number")
     def serialize_phone_number(self, value):
-        if value is None:
-            return None
-        return phonenumbers.format_number(value, phonenumbers.PhoneNumberFormat.E164)
+        return serialize_phone(self, value)
