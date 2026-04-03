@@ -4,11 +4,12 @@ This module is designed to work with a s3_client.
 Defines functions for upload a file, delete a file,
 replace a file, cache a file.
 """
-
+import io
+import logging
 from datetime import timedelta
 
 from botocore.exceptions import ClientError
-from fastapi import UploadFile
+from PIL import Image, ImageOps
 
 from src.user_management_api.core.config import s3, r
 from src.user_management_api.exceptions.user import S3StorageError, FileValidateError
@@ -31,23 +32,38 @@ def validate_file_uploaded(file) -> None:
     if size_file > 2*1024*1024:
         raise FileValidateError(detail="The file is too large.")
 
-def generate_image_s3_path(file: UploadFile, user_id) -> str:
+
+def generate_image_s3_path(file, user_id) -> str:
     """
     Create image_s3_path for a user avatar.
     """
-    ext = file.filename.split(".")[-1].lower()
     file_name = file.filename.split(".")[0].lower()
-    image_s3_path = f"users/avatar/{user_id}_{file_name}.{ext}"
+    image_s3_path = f"users/avatar/{user_id}_{file_name}.webp"
     return image_s3_path
 
 
-def upload_file(file: UploadFile, bucket, image_s3_path) -> None:
+def process_image(file) -> io.BytesIO:
+    """
+    Process file for definite size and extension.
+    """
+    input_img = Image.open(file.file)
+    img = input_img.convert("RGB")
+    img_square = ImageOps.pad(img, (500,500))
+    output_img = io.BytesIO()
+    img_square.save(output_img, format="WEBP", quality=95)
+    output_img.seek(0)
+
+    return output_img
+
+
+def upload_file(output_img, bucket, image_s3_path) -> None:
     """
     Upload a file to an S3 bucket.
     """
     try:
-        s3.upload_fileobj(file.file, bucket, image_s3_path)
-    except ClientError:
+        s3.upload_fileobj(output_img, bucket, image_s3_path)
+    except ClientError as e:
+        logging.error(e)
         raise S3StorageError("The file is not uploaded")
 
 
@@ -57,7 +73,8 @@ def delete_file(bucket, image_s3_path) -> None:
     """
     try:
         s3.delete_object(Bucket=bucket, Key=image_s3_path)
-    except ClientError:
+    except ClientError as e:
+        logging.error(e)
         raise S3StorageError("The file is not deleted")
 
 
@@ -74,7 +91,8 @@ def create_presigned_url(bucket, image_s3_path, region_name, expiration=3600) ->
             ExpiresIn=expiration,
         )
         return presigned_url
-    except ClientError:
+    except ClientError as e:
+        logging.error(e)
         raise S3StorageError("The presignedurl is not created")
 
 
@@ -106,24 +124,28 @@ async def get_presigned_url_from_redis(user_id) ->str | None:
         return None
 
 
-async def replace_file(bucket, user_id, old_image_s3_path, file: UploadFile, region_name) -> str:
+async def replace_file(bucket, user_id, old_image_s3_path, file, region_name) -> str:
     """
     Replace an old image by a new one in s3 and change a way to the S3 image in the database.
     """
     try:
         validate_file_uploaded(file)
 
+        # Create a path for new avatar.
         new_image_s3_path = generate_image_s3_path(file, user_id)
 
+        # Precess an old image to a new format.
+        output_img = process_image(file)
+
         # Create a path for a new file in the database.
-        upload_file(file, bucket, new_image_s3_path)
+        upload_file(output_img, bucket, new_image_s3_path)
 
         # Delete a file from bucket.
         if old_image_s3_path:
             delete_file(bucket, old_image_s3_path)
 
-        # Delete predesign url for a user in redis.
-        await delete_presigned_url_from_redis(user_id)
+            # Delete predesign url for a user in redis.
+            await delete_presigned_url_from_redis(user_id)
 
         #Set presigned url of an image if it exists
         presigned_url = create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)

@@ -83,10 +83,7 @@ async def delete_me(
         user = await UserDAO.find_one_or_none(db, User.id == user_id_access)
         if user.image_s3_path:
             delete_file(bucket, user.image_s3_path)
-            try:
-                await delete_presigned_url_from_redis(user_id_access)
-            except:
-                pass
+            await delete_presigned_url_from_redis(user_id_access)
 
         await UserDAO.delete_by_id(db, user_id_access)
         await db.commit()
@@ -188,10 +185,7 @@ async def delete_avatar(
     user = await UserDAO.find_one_or_none(db, User.id == user_id)
     if user.image_s3_path:
         delete_file(bucket, user.image_s3_path)
-        try:
-            await delete_presigned_url_from_redis(user_id)
-        except:
-            pass
+        await delete_presigned_url_from_redis(user_id)
         user = await UserDAO.patch_by_id(db, user_id, {"image_s3_path": ""})
         await db.commit()
     return ProfileUserResponse.model_validate(user)
