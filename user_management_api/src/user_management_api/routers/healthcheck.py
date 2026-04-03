@@ -2,11 +2,12 @@
 Health check endpoint verifies that the application is running
 and able to response to requests. Returns a simple status indicator for monitoring.
 """
+from fastapi import APIRouter
 
 from src.user_management_api.schemas.healthcheck import HealthResponse
-from src.user_management_api.main import app
 
+health_router = APIRouter(prefix="/system")
 
-@app.get("/healthcheck", response_model=HealthResponse)
-async def healthcheck() -> HealthResponse:
+@health_router.get("/health", response_model=HealthResponse)
+async def health() -> HealthResponse:
     return HealthResponse(status="ok")

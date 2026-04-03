@@ -41,7 +41,6 @@ class ProfileUserPatch(BaseModel):
     username: str | None = None
     phone_number: str | None = None
     email: str | None = None
-    image_s3_path: str | None = None
 
     @field_validator("phone_number")
     def validate_phone_number_reg(cls, value: str | None) -> str | None:
@@ -71,3 +70,11 @@ class ProfileUserResponse(BaseModel):
     @field_serializer("phone_number")
     def serialize_phone_number(self, value):
         return serialize_phone(self, value)
+
+
+class PresignUrlGet(BaseModel):
+    """
+    Schema for getting the presign url from redis to an avatar usage.
+    """
+
+    presigned_url: str
