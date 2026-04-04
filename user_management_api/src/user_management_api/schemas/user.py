@@ -24,7 +24,6 @@ class ProfileUserGet(BaseModel):
     username: str
     phone_number: Any | None
     email: str
-    image_s3_path: str | None
     group_name: str
 
     @field_serializer("phone_number")
@@ -76,5 +75,20 @@ class PresignUrlGet(BaseModel):
     """
     Schema for getting the presign url from redis to an avatar usage.
     """
-
     presigned_url: str
+
+
+class PresignedPostResponse(BaseModel):
+    """
+    Schema for presign post.
+    """
+    key: str
+    url: str
+    fields: dict[str, str]
+
+
+class ConfirmAvatarRequest(BaseModel):
+    """
+    Schema for getting avatar url after confirm new avatar.
+    """
+    key: str

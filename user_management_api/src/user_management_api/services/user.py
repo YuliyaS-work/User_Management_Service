@@ -2,19 +2,21 @@
 The module providing handlers for the user information in a profile,
 including  operations.
 """
+from typing import Any
 
-from fastapi import Depends, Request, Response, UploadFile, File
+from fastapi import Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings
-from src.user_management_api.core.s3_client import delete_presigned_url_from_redis, delete_file, replace_file, \
-    get_presigned_url_from_redis, save_presigned_url_to_redis, create_presigned_url
+from src.user_management_api.core.s3_client import delete_presigned_url_from_redis, delete_file, \
+    get_presigned_url_from_redis, save_presigned_url_to_redis, create_presigned_url, create_presigned_post, \
+    generate_image_s3_path
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.db.session import get_session
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.models import User, Group
+from src.user_management_api.models import User
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest
 from src.user_management_api.services.auth import delete_refresh_token_from_redis, verify_refresh_token, \
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
@@ -47,7 +49,6 @@ async def get_me(
         username=str(user.username),
         phone_number=user.phone_number,
         email=str(user.email),
-        image_s3_path=str(user.image_s3_path),
         group_name=group_name
     )
 
@@ -82,7 +83,7 @@ async def delete_me(
         #Delete an image from aws s3 and the way to the image from redis if exists
         user = await UserDAO.find_one_or_none(db, User.id == user_id_access)
         if user.image_s3_path:
-            delete_file(bucket, user.image_s3_path)
+            await delete_file(bucket, user.image_s3_path)
             await delete_presigned_url_from_redis(user_id_access)
 
         await UserDAO.delete_by_id(db, user_id_access)
@@ -135,13 +136,37 @@ async def get_avatar(
     presigned_url = await get_presigned_url_from_redis(user_id)
     if not presigned_url:
         user = await UserDAO.find_one_or_none(db, User.id == user_id)
-        presigned_url = create_presigned_url(bucket, user.image_s3_path, region_name, expiration=3600)
+        presigned_url = await create_presigned_url(bucket, user.image_s3_path, region_name, expiration=3600)
         await save_presigned_url_to_redis(presigned_url, user_id)
     return PresignUrlGet(presigned_url=presigned_url)
 
 
-async def patch_avatar(
-        file: UploadFile = File(...),
+async def get_presigned_post(
+        user_id: str = Depends(get_current_user),
+        bucket: str = settings.bucket_name,
+        region_name: str = settings.aws_region,
+) -> PresignedPostResponse:
+    """
+    Update a user avatar.
+
+    Args:
+        user_id: A user ID from JWT access token for getting a user profile.
+        bucket: The bucket name in AWS S3.
+        region_name: AWS region where the s3 bucket is located.
+    Returns:
+        PresignedPostResponse: Data required to upload the file to s3 directly.
+    """
+    new_image_s3_path = generate_image_s3_path(user_id)
+    post = await create_presigned_post(bucket, new_image_s3_path, region_name, expiration=3600)
+    return PresignedPostResponse(
+        key=new_image_s3_path,
+        url=post["url"],
+        fields=post["fields"]
+    )
+
+
+async def confirm_avatar(
+        body: ConfirmAvatarRequest,
         db: AsyncSession = Depends(get_session),
         user_id: str = Depends(get_current_user),
         bucket: str = settings.bucket_name,
@@ -152,18 +177,27 @@ async def patch_avatar(
     Return a presign url for an avatar usage.
 
     Args:
-        file
+        body (ConfirmAvatarRequest): Contains key, a path to a new avatar user.
         db (AsyncSession): Database session.
         user_id: A user ID from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
-        region_name
+        region_name: AWS region where the s3 bucket is located.
     Returns:
          ProfileUserResponse: Partially updated user profile information.
     """
+    new_image_s3_path = body.key
+
     user = await UserDAO.find_one_or_none(db, User.id == user_id)
-    new_image_s3_path =  await replace_file(bucket, user_id, user.image_s3_path, file, region_name)
-    updated_user = await UserDAO.patch_by_id(db, user_id, {"image_s3_path":new_image_s3_path})
+
+    if user.image_s3_path:
+        await delete_file(bucket, user.image_s3_path)
+        await delete_presigned_url_from_redis(user_id)
+
+    updated_user = await UserDAO.patch_by_id(db, user_id, {"image_s3_path": new_image_s3_path})
     await db.commit()
+    presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
+    await save_presigned_url_to_redis(presigned_url, user_id)
+
     return ProfileUserResponse.model_validate(updated_user)
 
 
@@ -184,8 +218,8 @@ async def delete_avatar(
     """
     user = await UserDAO.find_one_or_none(db, User.id == user_id)
     if user.image_s3_path:
-        delete_file(bucket, user.image_s3_path)
+        await delete_file(bucket, user.image_s3_path)
         await delete_presigned_url_from_redis(user_id)
-        user = await UserDAO.patch_by_id(db, user_id, {"image_s3_path": ""})
+        user = await UserDAO.patch_by_id(db, user_id, {"image_s3_path": None})
         await db.commit()
     return ProfileUserResponse.model_validate(user)

@@ -3,17 +3,17 @@ User module providing routers for user information,
 including get, patch and delete operations.
 """
 
-from fastapi import APIRouter, Depends, Request, Response, UploadFile, File
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import APIKeyCookie
 
 from src.user_management_api.core.config import settings
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest
 from src.user_management_api.services.auth import get_current_user
-from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, patch_avatar, \
-    delete_avatar
+from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, \
+    delete_avatar, get_presigned_post, confirm_avatar
 
 user_router = APIRouter(prefix="/user")
 
@@ -99,27 +99,46 @@ async def get_avatar_item(
     return await get_avatar(db, user_id, bucket, region_name)
 
 
-@user_router.patch("/me/avatar", dependencies=[Depends(cookie_schema), Depends(get_current_user)])
-async def patch_avatar_item(
-        file: UploadFile = File(...),
+@user_router.post("/me/avatar/presigned-post", dependencies=[Depends(cookie_schema), Depends(get_current_user)])
+async def get_presigned_post_avatar(
+        user_id: str = Depends(get_current_user),
+        bucket: str = settings.bucket_name,
+        region_name: str = settings.aws_region,
+) -> PresignedPostResponse:
+    """
+    Update a user avatar.
+
+    Args:
+        user_id: A user ID from JWT access token for getting a user profile.
+        bucket: The bucket name in AWS S3.
+        region_name: AWS region where the s3 bucket is located.
+    Returns:
+        PresignedPostResponse: Data required to upload the file to s3 directly.
+    """
+    return await get_presigned_post(user_id, bucket, region_name)
+
+
+@user_router.patch("/me/avatar/confirm", dependencies=[Depends(cookie_schema), Depends(get_current_user)])
+async def patch_confirm_avatar(
+        body: ConfirmAvatarRequest,
         db: AsyncSession = Depends(get_session),
         user_id: str = Depends(get_current_user),
         bucket: str = settings.bucket_name,
         region_name: str = settings.aws_region,
 ) -> ProfileUserResponse:
     """
-    Update a user avatar.
+    Confirm avatar upload.
 
     Args:
-        file
+        body (ConfirmAvatarRequest): Contains key, a path to a new avatar user.
         db (AsyncSession): Database session.
         user_id: A user ID from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
-        region_name
+        region_name: AWS region where the s3 bucket is located.
     Returns:
          ProfileUserResponse: Partially updated user profile information
     """
-    return await patch_avatar(file, db, user_id, bucket, region_name)
+    return await confirm_avatar(body, db, user_id, bucket, region_name)
 
 
 @user_router.delete("/me/avatar", dependencies=[Depends(cookie_schema), Depends(get_current_user)])

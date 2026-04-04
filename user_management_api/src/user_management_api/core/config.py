@@ -4,6 +4,7 @@ Application configuration settings.
 Defines global constants such as application name, debug mode,
 and database connection URL.
 """
+import aioboto3
 import boto3
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from redis.asyncio import Redis
@@ -36,10 +37,8 @@ r = Redis(
     decode_responses=True
     )
 
-s3 = boto3.client(
-    "s3",
-    region_name=settings.aws_region,
+s3_session = aioboto3.Session(
     aws_access_key_id=settings.aws_access_key_id,
     aws_secret_access_key=settings.aws_secret_access_key,
-
+    region_name=settings.aws_region,
 )
