@@ -15,8 +15,8 @@ class APIException(HTTPException):
     status_code: int
     detail: str
     def __init__(self, detail: str ):
-        self.detail = detail
-
+        # self.detail = detail
+        super().__init__(status_code=self.status_code, detail = detail)
 
 class AuthenticationException(APIException):
     """

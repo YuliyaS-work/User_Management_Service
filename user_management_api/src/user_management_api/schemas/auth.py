@@ -5,6 +5,7 @@ Provides validation are used for incoming and outgoing authentication data.
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from src.user_management_api.exceptions.auth import APIException
 from src.user_management_api.validators.auth import validate_phone_number_signup, validate_password
 
 
@@ -60,8 +61,17 @@ class PayLoad(BaseModel):
     jti: str
 
 
+
 class APIErrorResponse(BaseModel):
     """
     Schema for error response returned by the API.
     """
+    status_code: int
     detail: str
+
+    @classmethod
+    def from_exception(cls, exc: APIException):
+        return cls(
+            status_code=exc.status_code,
+            detail=exc.detail
+        )

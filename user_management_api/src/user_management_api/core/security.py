@@ -42,7 +42,8 @@ def create_access_token(data: dict[str, Any]) -> str:
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
-    to_encode.update({"exp": expire, "type": "access"})
+    jti = str(uuid.uuid4())
+    to_encode.update({"exp": expire, "type": "access", "jti": jti})
     encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 

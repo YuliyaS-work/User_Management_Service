@@ -12,15 +12,23 @@ from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
-    verify_password, decode_token, validate_refresh_token, get_token_hash
+    verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.utils.auth import send_tokens_to_user, delete_tokens_from_cookies, \
-    get_refresh_token_from_cookie
+    get_refresh_token_from_cookie, get_access_token_from_cookie
 from src.user_management_api.core.config import r
 
+def get_current_user(request: Request) -> str:
+    """
+    Get a user ID from JWT access token.
+    """
+    access_token = get_access_token_from_cookie(request)
+    payload = decode_token(access_token)
+    user_id = validate_access_token(payload)
+    return user_id
 
 async def create_and_store_tokens(user_id: str) -> tuple[str, str]:
     """
@@ -50,7 +58,7 @@ async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str
     return refresh_token
 
 
-async def verify_refresh_token_and_delete(request: Request) -> tuple[str, str]:
+async def verify_refresh_token(request: Request) -> tuple[str, str]:
     """
     Verify refresh token from cookies to one stored in redis.
     """
@@ -72,7 +80,7 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     Returns:
         TokenResponse: An access and refresh tokens.
     """
-    # Compare the data in login field with email, username and phone number in the database.
+     # Compare the data in login field with email, username and phone number in the database.
     if await UserDAO.find_one_or_none(db, User.username == user_data.username):
         raise ConflictException(detail="Username already exists")
 
@@ -170,7 +178,7 @@ async def logout_user(
     """
     # Verify refresh token from cookies and move it to the blacklist.
     try:
-        user_id, jti = await verify_refresh_token_and_delete(request)
+        user_id, jti = await verify_refresh_token(request)
         await delete_refresh_token_from_redis(user_id, jti)
         return {"message": "User logged out"}
     finally:
@@ -189,7 +197,7 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse:
     """
     try:
         # Verify a refresh token and move it to the blacklist.
-        user_id, jti = await verify_refresh_token_and_delete(request)
+        user_id, jti = await verify_refresh_token(request)
         await delete_refresh_token_from_redis(user_id, jti)
 
         # Create tokens, set tokens in cookies and a refresh token in redis.

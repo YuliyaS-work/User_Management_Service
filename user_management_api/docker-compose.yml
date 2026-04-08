@@ -24,7 +24,7 @@ services:
         - "6379:6379"
       volumes:
         - redis_data:/data
-      command: redis-server --bind 0.0.0.0 --requirepass ${REDIS_PASSWORD}
+      command: redis-server --bind 0.0.0.0 --requirepass ${REDIS_PASSWORD} --appendonly yes
 
 
 
@@ -40,6 +40,10 @@ services:
         - REDIS_PORT=${REDIS_PORT}
         - SECRET_KEY=${SECRET_KEY}
         - ALGORITHM=${ALGORITHM}
+        - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+        - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+        - AWS_REGION=${AWS_REGION}
+        - BUCKET_NAME=${BUCKET_NAME}
       depends_on:
         db_ums:
           condition: service_healthy
