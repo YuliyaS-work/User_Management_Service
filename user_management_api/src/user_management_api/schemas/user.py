@@ -92,3 +92,20 @@ class ConfirmAvatarRequest(BaseModel):
     Schema for getting avatar url after confirm new avatar.
     """
     key: str
+
+
+class UserResponse(BaseModel):
+    name: str
+    surname: str
+    username: str
+    phone_number: Any | None
+    email: str
+    is_blocked: bool
+    created_at: datetime
+    modified_at: datetime
+    group_name: str | None
+    role: list | str
+
+    @field_serializer("phone_number")
+    def serialize_phone_number(self, value):
+        return serialize_phone(self, value)

@@ -51,15 +51,26 @@ class TokenResponse(BaseModel):
     refresh_token: str
 
 
-class PayLoad(BaseModel):
+class PayLoadAccessToken(BaseModel):
     """
-    Schema for token payload.
+    Schema for access token payload.
+    """
+    sub: str
+    group_id: int | None
+    roles: list | str
+    exp: int
+    type: str
+    jti: str
+
+
+class PayLoadRefreshToken(BaseModel):
+    """
+    Schema for refresh token payload.
     """
     sub: str
     exp: int
     type: str
     jti: str
-
 
 
 class APIErrorResponse(BaseModel):
@@ -75,3 +86,12 @@ class APIErrorResponse(BaseModel):
             status_code=exc.status_code,
             detail=exc.detail
         )
+
+
+class CurrentUser(BaseModel):
+    """
+    Schema
+    """
+    user_id: str
+    group_id: int | None
+    roles: str | list

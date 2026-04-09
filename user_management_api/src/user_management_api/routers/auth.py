@@ -70,14 +70,15 @@ async def logout_user_item(
 
 
 @auth_router.post("/refresh-token", response_model=TokenResponse)
-async def renew_tokens_item( request: Request, response: Response) -> TokenResponse:
+async def renew_tokens_item( request: Request, response: Response, db: AsyncSession = Depends(get_session)) -> TokenResponse:
     """
     Renew a couple JWT tokens with old refresh token.
 
     Args:
         response (Response): save JWT tokens in cookies.
         request: access token from cookies.
+        db (AsyncSession): Database session.
     Returns:
         TokenResponse: access and refresh tokens.
     """
-    return await renew_tokens(request, response)
+    return await renew_tokens(request, response, db)

@@ -3,6 +3,8 @@ Data Access Object for user-related database operations.
 """
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.future import select
 
 from .base import BaseDAO
 from src.user_management_api.models import User, Role
@@ -31,3 +33,19 @@ class UserDAO(BaseDAO):
          )
 
          return user
+
+    @classmethod
+    async def find_one_or_none_with_related_data(cls, db: AsyncSession, where=None, **filters) -> User | None:
+        """
+        Find a single record matching the filter or/and the condition or return None.
+        """
+        query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group) )
+
+        if where is not None:
+            query = query.where(where)
+
+        if filters:
+            query = query.filter_by(**filters)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
