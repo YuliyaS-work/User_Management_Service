@@ -19,7 +19,7 @@ from src.user_management_api.exceptions.user import AuthorizationError, Resource
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, UserResponse
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch
 from src.user_management_api.services.auth import delete_refresh_token_from_redis, verify_refresh_token, \
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
@@ -39,7 +39,9 @@ async def get_me(
         ProfileUserGet: The profile information for an authenticated user.
     """
     # Get user by ID.
-    user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
+    user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+
+    roles = [role.role_name for role in user.roles]
 
     # Get group name for the user.
     if user.group_id:
@@ -52,7 +54,8 @@ async def get_me(
         username=str(user.username),
         phone_number=user.phone_number,
         email=str(user.email),
-        group_name=group_name
+        group_name=group_name,
+        roles=roles
     )
 
 
@@ -232,10 +235,7 @@ async def get_user(
         user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> UserResponse | None:
-
-    current_user_roles = current_user.roles
-    current_group_id = current_user.group_id
+) -> GetUserResponse | None:
 
     if "ADMIN" in current_user.roles:
         user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
@@ -246,7 +246,7 @@ async def get_user(
 
 
     elif "MODERATOR" in current_user.roles:
-        user = await UserDAO.find_one_or_none_with_related_data(db, and_(User.id == user_id, User.group_id == current_group_id))
+        user = await UserDAO.find_one_or_none_with_related_data(db, and_(User.id == user_id, User.group_id == current_user.group_id))
         if not user:
             raise AuthorizationError("Not allowed")
         roles = [role.role_name.value for role in user.roles]
@@ -255,7 +255,7 @@ async def get_user(
     else:
         raise AuthorizationError("Not allowed")
 
-    return UserResponse(
+    return GetUserResponse(
         name=user.name,
         surname=user.surname,
         username=user.username,
@@ -267,3 +267,17 @@ async def get_user(
         group_name=group_name,
         role=roles
     )
+
+async def patch_user(
+        user_id: str,
+        data: UserPatch,
+        db: AsyncSession = Depends(get_session),
+        current_user: CurrentUser = Depends(get_current_user)
+) -> ProfileUserResponse | None:
+    if "ADMIN" in current_user.roles:
+        updated_user = await UserDAO.patch_by_id(db, user_id, data.model_dump(exclude_unset=True))
+        await db.commit()
+    else:
+        raise AuthorizationError("Not allowed")
+
+    return ProfileUserResponse.model_validate(updated_user)

@@ -11,10 +11,10 @@ from src.user_management_api.core.config import settings
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, UserResponse
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch
 from src.user_management_api.services.auth import get_current_user
 from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, \
-    delete_avatar, get_presigned_post, confirm_avatar, get_user
+    delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user
 
 user_router = APIRouter(prefix="/user")
 
@@ -161,10 +161,20 @@ async def delete_avatar_item(
     return await delete_avatar(db, current_user, bucket)
 
 
-@user_router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
+@user_router.get("/{user_id}", response_model=GetUserResponse, dependencies=[Depends(cookie_schema)])
 async def get_user_by_id(
         user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> UserResponse:
+) -> GetUserResponse:
     return await get_user(user_id, db, current_user)
+
+
+@user_router.patch("/{user_id}", response_model=ProfileUserResponse, dependencies=[Depends(cookie_schema)])
+async def patch_user_by_id(
+        user_id: str,
+        data: UserPatch,
+        db: AsyncSession = Depends(get_session),
+        current_user: CurrentUser = Depends(get_current_user)
+) -> ProfileUserResponse:
+    return await patch_user(user_id, data, db, current_user)

@@ -25,6 +25,7 @@ class ProfileUserGet(BaseModel):
     phone_number: Any | None
     email: str
     group_name: str
+    roles: list | str = None
 
     @field_serializer("phone_number")
     def serialize_phone_number(self, value):
@@ -66,6 +67,7 @@ class ProfileUserResponse(BaseModel):
     modified_at: datetime
     group_id: int | None
 
+
     @field_serializer("phone_number")
     def serialize_phone_number(self, value):
         return serialize_phone(self, value)
@@ -94,7 +96,7 @@ class ConfirmAvatarRequest(BaseModel):
     key: str
 
 
-class UserResponse(BaseModel):
+class GetUserResponse(BaseModel):
     name: str
     surname: str
     username: str
@@ -109,3 +111,21 @@ class UserResponse(BaseModel):
     @field_serializer("phone_number")
     def serialize_phone_number(self, value):
         return serialize_phone(self, value)
+
+
+class UserPatch(BaseModel):
+    name: str | None = None
+    surname: str |  None = None
+    username: str | None = None
+    phone_number: Any | None = None
+    email: str | None = None
+    is_blocked: bool | None = None
+    group_name: str | None = None
+    role: list | str = None
+
+    @field_validator("phone_number")
+    def validate_phone_number_reg(cls, value: str | None) -> str | None:
+        """
+        Validate provided phone number.
+        """
+        return validate_phone_number_signup(value)
