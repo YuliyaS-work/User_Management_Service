@@ -51,7 +51,7 @@ class BaseDAO:
         return None
 
     @classmethod
-    async def patch_by_id(cls,db: AsyncSession, user_id: str, data: dict[str, Any] ):
+    async def patch_by_id(cls, db: AsyncSession, user_id: str, data: dict[str, Any] ):
         """
         Delete an instance to the session without commiting.
         """

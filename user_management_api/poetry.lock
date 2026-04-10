@@ -687,6 +687,66 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.8)", "htt
 standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[standard-no-fastapi-cloud-cli] (>=0.0.8)", "httpx (>=0.23.0,<1.0.0)", "jinja2 (>=3.1.5)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.18)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
+name = "fastapi-filter"
+version = "2.0.1"
+description = "FastAPI filter"
+optional = false
+python-versions = "<4.0,>=3.9"
+groups = ["main"]
+files = [
+    {file = "fastapi_filter-2.0.1-py3-none-any.whl", hash = "sha256:711d48707ec62f7c9e12a7713fc0f6a99858a9e3741b4d108102d5599e77197d"},
+    {file = "fastapi_filter-2.0.1.tar.gz", hash = "sha256:cffda370097af7e404f1eb188aca58b199084bfaf7cec881e40b404adf12566e"},
+]
+
+[package.dependencies]
+fastapi = ">=0.100.0,<1.0"
+pydantic = ">=2.0.0,<3.0.0"
+
+[package.extras]
+all = ["SQLAlchemy (>=1.4.36,<2.1.0)", "beanie (>=1.26.0,<1.30.0)", "mongoengine (>=0.24.1,<0.28.0)"]
+beanie = ["beanie (>=1.26.0,<1.30.0)"]
+mongoengine = ["mongoengine (>=0.24.1,<0.28.0)"]
+sqlalchemy = ["SQLAlchemy (>=1.4.36,<2.1.0)"]
+
+[[package]]
+name = "fastapi-pagination"
+version = "0.15.12"
+description = "FastAPI pagination"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "fastapi_pagination-0.15.12-py3-none-any.whl", hash = "sha256:758e21157b2844feecb2409072f1433e24f2dc9526ae7906aa1a1b28622a970a"},
+    {file = "fastapi_pagination-0.15.12.tar.gz", hash = "sha256:914b41e07b8556de34c12d3568c9b7137eb62a3558420061a4acbebf7e729a08"},
+]
+
+[package.dependencies]
+fastapi = ">=0.93.0"
+pydantic = ">=1.9.1"
+typing-extensions = ">=4.8.0"
+
+[package.extras]
+aiosqlite = ["aiosqlite (>=0.19.0,!=0.22.0,!=0.22.1)"]
+asyncpg = ["asyncpg (>=0.24.0)", "sqlalchemy (>=1.3.20)"]
+beanie = ["beanie (>=2.1.0)"]
+bunnet = ["bunnet (>=1.1.0)"]
+databases = ["databases (>=0.6.0)"]
+django = ["databases (>=0.6.0)", "django (<6.0.0)"]
+elasticsearch = ["elasticsearch-dsl (>=8.13.0)"]
+firestore = ["google-cloud-firestore (>=2.19.0)"]
+mongoengine = ["mongoengine (>=0.23.1)"]
+motor = ["motor (>=3.6.0)"]
+odmantic = ["odmantic (>=1.0.2)"]
+orm = ["databases (>=0.6.0)", "orm (>=0.3.1)"]
+ormar = ["ormar (>=0.21.0)"]
+piccolo = ["piccolo (>=0.89)"]
+psycopg = ["psycopg[binary] (>=3.3.2)"]
+scylla-driver = ["scylla-driver (>=3.25.6)"]
+sqlalchemy = ["sqlakeyset (>=2.0.1680321678)", "sqlalchemy (>=1.3.20)"]
+sqlmodel = ["sqlakeyset (>=2.0.1680321678)", "sqlmodel (>=0.0.22)"]
+tortoise = ["tortoise-orm (>=0.22.0)"]
+
+[[package]]
 name = "frozenlist"
 version = "1.8.0"
 description = "A list-like structure which implements collections.abc.MutableSequence"
@@ -2485,4 +2545,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "9d955039dfbe04c8569d36f06fac52b6409feb73fa57d67ac9c1d12d8f853b49"
+content-hash = "a16960353b48c8c10243cd3cc36f852eb081071355ea1f51784743601683838c"

@@ -6,9 +6,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-import phonenumbers
 from pydantic import BaseModel, field_validator, ConfigDict, field_serializer
+from fastapi_filter.contrib.sqlalchemy import Filter
+from fastapi_pagination import Params
 
+from src.user_management_api.models import User
 from src.user_management_api.validators.auth import validate_phone_number_signup
 from src.user_management_api.validators.user import serialize_phone
 
@@ -97,6 +99,8 @@ class ConfirmAvatarRequest(BaseModel):
 
 
 class GetUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     surname: str
     username: str
@@ -129,3 +133,39 @@ class UserPatch(BaseModel):
         Validate provided phone number.
         """
         return validate_phone_number_signup(value)
+
+
+class UserPagination(Params):
+    size: int = 30
+
+
+class UserFilter(Filter):
+    name: str | None = None
+    surname: str | None = None
+
+    sort: str | None = None
+    order_by: str | None = None
+
+    class Constants(Filter.Constants):
+        model = User
+        ordering_field_name = ["name", "surname"]
+
+    def filter_users(self, users_list):
+        if self.name:
+            users_list = [user for user in users_list if self.name.lower() in user.name.lower()]
+        if self.surname:
+            users_list = [user for user in users_list if self.surname.lower() in user.surname.lower()]
+        return users_list
+
+    def sort_users(self, users_list):
+        if not self.sort:
+            return users_list
+
+        if not hasattr(User, self.sort):
+            return users_list
+
+        if self.order_by == "desc":
+            reverse = True
+        else:
+            reverse = False
+        return sorted(users_list, key=lambda user: getattr(user, self.sort), reverse=reverse)

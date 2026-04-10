@@ -39,7 +39,7 @@ class UserDAO(BaseDAO):
         """
         Find a single record matching the filter or/and the condition or return None.
         """
-        query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group) )
+        query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group))
 
         if where is not None:
             query = query.where(where)
@@ -49,3 +49,15 @@ class UserDAO(BaseDAO):
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
+
+
+
+    @classmethod
+    async def get_all(cls, db: AsyncSession, where=None):
+        query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group))
+
+        if where is not None:
+            query = query.where(where)
+
+        result = await db.execute(query)
+        return result.scalars().all()

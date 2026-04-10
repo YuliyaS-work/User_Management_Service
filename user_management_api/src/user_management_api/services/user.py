@@ -3,9 +3,9 @@ The module providing handlers for the user information in a profile,
 including  operations.
 """
 from operator import and_
-from typing import Any
 
 from fastapi import Depends, Request, Response
+from fastapi_pagination import paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings
@@ -19,7 +19,7 @@ from src.user_management_api.exceptions.user import AuthorizationError, Resource
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch, UserFilter, UserPagination
 from src.user_management_api.services.auth import delete_refresh_token_from_redis, verify_refresh_token, \
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
@@ -281,3 +281,50 @@ async def patch_user(
         raise AuthorizationError("Not allowed")
 
     return ProfileUserResponse.model_validate(updated_user)
+
+
+async def get_response_list(list_users):
+    new_list = []
+    for user in list_users:
+        roles = [role.role_name.value for role in user.roles]
+        group_name = user.group.name if user.group else None
+        user = GetUserResponse(
+            name=user.name,
+            surname=user.surname,
+            username=user.username,
+            phone_number=user.phone_number,
+            email=user.email,
+            is_blocked=user.is_blocked,
+            created_at=user.created_at,
+            modified_at=user.modified_at,
+            group_name=group_name,
+            role=roles
+            )
+        new_list.append(user)
+    return new_list
+
+
+async def get_users(
+        db: AsyncSession = Depends(get_session),
+        current_user: CurrentUser = Depends(get_current_user),
+        user_filter: UserFilter = Depends(),
+        pagination: UserPagination = Depends()
+):
+    response = {}
+    roles = {
+        "ADMIN": None,
+        "MODERATOR": User.group_id == current_user.group_id
+    }
+    for role, condition in roles.items():
+        if role in current_user.roles:
+            if condition is not None:
+                users = await UserDAO.get_all(db, condition)
+            else:
+                users = await UserDAO.get_all(db)
+            filtered_users = user_filter.filter_users(users)
+            sorted_users = user_filter.sort_users(filtered_users)
+            users_list = await get_response_list(sorted_users)
+            response[f'{role}'] = paginate(users_list, pagination)
+        else:
+            continue
+    return response

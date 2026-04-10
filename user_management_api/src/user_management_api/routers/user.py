@@ -4,6 +4,7 @@ including get, patch and delete operations.
 """
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi_filter import FilterDepends
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import APIKeyCookie
 
@@ -11,14 +12,16 @@ from src.user_management_api.core.config import settings
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch
+    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch, UserFilter
 from src.user_management_api.services.auth import get_current_user
 from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, \
-    delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user
+    delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user, get_users, UserPagination
 
 user_router = APIRouter(prefix="/user")
+users_router = APIRouter(prefix="/users")
 
 cookie_schema = APIKeyCookie(name="access_token")
+
 
 @user_router.get("/me", response_model=ProfileUserGet, dependencies=[Depends(cookie_schema)])
 async def get_me_item(
@@ -178,3 +181,13 @@ async def patch_user_by_id(
         current_user: CurrentUser = Depends(get_current_user)
 ) -> ProfileUserResponse:
     return await patch_user(user_id, data, db, current_user)
+
+
+@users_router.patch("/", dependencies=[Depends(cookie_schema)])
+async def get_users_list(
+        db: AsyncSession = Depends(get_session),
+        current_user: CurrentUser = Depends(get_current_user),
+        user_filter: UserFilter = FilterDepends(UserFilter),
+        pagination: UserPagination = Depends()
+):
+    return await get_users(db, current_user,user_filter, pagination)
