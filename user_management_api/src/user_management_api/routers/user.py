@@ -2,6 +2,7 @@
 User module providing routers for user information,
 including get, patch and delete operations.
 """
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi_filter import FilterDepends
@@ -11,11 +12,11 @@ from fastapi.security import APIKeyCookie
 from src.user_management_api.core.config import settings
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import CurrentUser
-from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch, UserFilter
+from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet, UserPagination, \
+    PresignedPostResponse, ConfirmAvatarRequest, UserResponse, UserPatchByAdmin, UserFilter
 from src.user_management_api.services.auth import get_current_user
 from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, \
-    delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user, get_users, UserPagination
+    delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user, get_users
 
 user_router = APIRouter(prefix="/user")
 users_router = APIRouter(prefix="/users")
@@ -23,11 +24,11 @@ users_router = APIRouter(prefix="/users")
 cookie_schema = APIKeyCookie(name="access_token")
 
 
-@user_router.get("/me", response_model=ProfileUserGet, dependencies=[Depends(cookie_schema)])
+@user_router.get("/me", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def get_me_item(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> ProfileUserGet:
+) -> UserResponse:
     """
     Information for authenticated user in a profile.
 
@@ -35,7 +36,7 @@ async def get_me_item(
         db (AsyncSession): Database session.
         current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
     Returns:
-        ProfileUserGet: The profile information for an authenticated user.
+        UserResponse: The profile information for an authenticated user.
     """
     return await get_me(db, current_user)
 
@@ -63,26 +64,26 @@ async def delete_me_item(
     return await delete_me(request, response, db, current_user, bucket)
 
 
-@user_router.patch("/me", response_model=ProfileUserResponse, dependencies=[Depends(cookie_schema)])
+@user_router.patch("/me", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def patch_me_item(
         data: ProfileUserPatch,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Update a user profile partially.
 
     Args:
         db (AsyncSession): Database session.
-        data (ProfileUserPatch): Incoming neu user data.
+        data (ProfileUserPatch): Incoming new user data.
         current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
     Returns:
-        ProfileUserResponse: Partially updated user profile information.
+        UserResponse: Updated user profile information.
     """
     return await patch_me(data, db, current_user)
 
 
-@user_router.get("/me/avatar", dependencies=[Depends(cookie_schema)])
+@user_router.get("/me/avatar", response_model=PresignUrlGet, dependencies=[Depends(cookie_schema)])
 async def get_avatar_item(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
@@ -103,7 +104,7 @@ async def get_avatar_item(
     return await get_avatar(db, current_user, bucket, region_name)
 
 
-@user_router.post("/me/avatar/presigned-post", dependencies=[Depends(cookie_schema)])
+@user_router.post("/me/avatar/presigned-post", response_model=PresignedPostResponse, dependencies=[Depends(cookie_schema)])
 async def get_presigned_post_avatar(
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
@@ -122,14 +123,14 @@ async def get_presigned_post_avatar(
     return await get_presigned_post(current_user, bucket, region_name)
 
 
-@user_router.patch("/me/avatar/confirm", dependencies=[Depends(cookie_schema)])
+@user_router.patch("/me/avatar/confirm", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def patch_confirm_avatar(
         body: ConfirmAvatarRequest,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
         region_name: str = settings.aws_region,
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Confirm avatar upload.
 
@@ -140,17 +141,17 @@ async def patch_confirm_avatar(
         bucket: The bucket name in AWS S3.
         region_name: AWS region where the s3 bucket is located.
     Returns:
-         ProfileUserResponse: Partially updated user profile information
+         UserResponse: Updated user profile information
     """
     return await confirm_avatar(body, db, current_user, bucket, region_name)
 
 
-@user_router.delete("/me/avatar", dependencies=[Depends(cookie_schema)])
+@user_router.delete("/me/avatar", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def delete_avatar_item(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Delete a user avatar.
 
@@ -159,35 +160,67 @@ async def delete_avatar_item(
         current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
     Returns:
-         ProfileUserResponse: Partially updated user profile information
+         UserResponse: Updated user profile information
     """
     return await delete_avatar(db, current_user, bucket)
 
 
-@user_router.get("/{user_id}", response_model=GetUserResponse, dependencies=[Depends(cookie_schema)])
+@user_router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def get_user_by_id(
         user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> GetUserResponse:
+) -> UserResponse | None:
+    """
+    Get information about a user profile by ID.
+
+    Args:
+        user_id: ID user for getting information about this user.
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+    Returns:
+        UserResponse: An information about a user profile by ID.
+    """
     return await get_user(user_id, db, current_user)
 
 
-@user_router.patch("/{user_id}", response_model=ProfileUserResponse, dependencies=[Depends(cookie_schema)])
+@user_router.patch("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def patch_user_by_id(
         user_id: str,
-        data: UserPatch,
+        data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> ProfileUserResponse:
+) -> UserResponse:
+    """
+    Get information about a user profile by ID.
+
+    Args:
+        user_id: ID user for getting information about this user.
+        data (UserPatchByAdmin):  Incoming new user data.
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+    Returns:
+        UserResponse: Updated user profile information.
+    """
     return await patch_user(user_id, data, db, current_user)
 
 
-@users_router.patch("/", dependencies=[Depends(cookie_schema)])
+@users_router.get("/", dependencies=[Depends(cookie_schema)])
 async def get_users_list(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         user_filter: UserFilter = FilterDepends(UserFilter),
         pagination: UserPagination = Depends()
-):
+) -> dict[str, Any]:
+    """
+    Get information about a user profile by ID.
+
+    Args:
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+        user_filter (UserFilter): A schema for filter and sorting information for loading.
+        pagination (UserPagination): Pagination for list of users.
+    Returns:
+        dict : Data for each role of current user.
+    """
     return await get_users(db, current_user,user_filter, pagination)

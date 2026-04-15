@@ -43,7 +43,7 @@ def create_access_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "access", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
 def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
@@ -54,7 +54,7 @@ def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     expire = datetime.now(timezone.utc) + timedelta(days=30)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "refresh", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt, jti
 
 
@@ -63,7 +63,7 @@ def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | None:
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
     try:
-        payload = {}
+        payload: PayLoadAccessToken | PayLoadRefreshToken | None = None
         payload_decoded = jwt.decode(token, settings.secret_key, settings.algorithm)
         if payload_decoded["type"] == "access":
             payload = PayLoadAccessToken(**payload_decoded)

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
     verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
+from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser
 from src.user_management_api.dao.user import UserDAO
@@ -40,6 +41,10 @@ async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, 
     Create JWT tokens and put refresh token in redis.
     """
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
+
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
     roles = [role.role_name.value for role in user.roles]
     access_payload = {
         "sub": user_id,

@@ -2,61 +2,72 @@
 The module providing handlers for the user information in a profile,
 including  operations.
 """
+import json
+from datetime import timedelta
 from operator import and_
+from typing import Any, Sequence
 
 from fastapi import Depends, Request, Response
 from fastapi_pagination import paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.user_management_api.core.config import settings
+from src.user_management_api.core.config import settings, r
 from src.user_management_api.core.s3_client import delete_presigned_url_from_redis, delete_file, \
     get_presigned_url_from_redis, save_presigned_url_to_redis, create_presigned_url, create_presigned_post, \
     generate_image_s3_path
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.db.session import get_session
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.exceptions.user import AuthorizationError, ResourceNotFound
+from src.user_management_api.exceptions.user import AuthorizationError, ResourceNotFound, S3StorageError
 from src.user_management_api.models import User
 from src.user_management_api.schemas.auth import CurrentUser
-from src.user_management_api.schemas.user import ProfileUserGet, ProfileUserPatch, ProfileUserResponse, \
-    PresignUrlGet, PresignedPostResponse, ConfirmAvatarRequest, GetUserResponse, UserPatch, UserFilter, UserPagination
+from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet, \
+    PresignedPostResponse, ConfirmAvatarRequest, UserResponse, UserPatchByAdmin, UserFilter, UserPagination, \
+    RoleResponse, GroupResponse
 from src.user_management_api.services.auth import delete_refresh_token_from_redis, verify_refresh_token, \
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
 
 
+def serialise_user_data(user: User | None) -> UserResponse:
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
+    roles = [RoleResponse(id=role.id, role_name=role.role_name.value) for role in user.roles]
+    group = GroupResponse(id=user.group.id, group_name=user.group.name) if user.group else None
+    user_serialized = UserResponse(
+        id=user.id,
+        name=user.name,
+        surname=user.surname,
+        username=user.username,
+        phone_number=user.phone_number,
+        email=user.email,
+        is_blocked=user.is_blocked,
+        created_at=user.created_at,
+        modified_at=user.modified_at,
+        group=group,
+        roles=roles
+    )
+    return user_serialized
+
+
 async def get_me(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> ProfileUserGet:
+) -> UserResponse:
     """
     Return an information for authenticated user in a profile.
 
     Args:
         db (Session): Database session.
-        current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser): A user data from JWT access token for getting a user profile.
     Returns:
-        ProfileUserGet: The profile information for an authenticated user.
+        UserResponse: The profile information for an authenticated user.
     """
     # Get user by ID.
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
 
-    roles = [role.role_name for role in user.roles]
-
-    # Get group name for the user.
-    if user.group_id:
-        group_name = user.group.name
-    else: group_name = ""
-
-    return ProfileUserGet(
-        name=str(user.name),
-        surname=str(user.surname),
-        username=str(user.username),
-        phone_number=user.phone_number,
-        email=str(user.email),
-        group_name=group_name,
-        roles=roles
-    )
+    return serialise_user_data(user)
 
 
 async def delete_me(
@@ -73,7 +84,7 @@ async def delete_me(
         request (Request): Get an access token from cookies.
         response (Response):  Delete JWT tokens from cookie.
         db (Session): Database session.
-        current_user (CurrentUser) : A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser) : A user data from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
     Returns:
         dict: The message about deletion of a user.
@@ -81,18 +92,22 @@ async def delete_me(
     #Verify refresh token to delete from redis.
     user_id_refresh, jti = await verify_refresh_token(request)
 
-    if current_user.user_id_access == user_id_refresh:
+    if current_user.user_id == user_id_refresh:
         #Delete JWT tokens for the user.
         await delete_refresh_token_from_redis(user_id_refresh, jti)
         delete_tokens_from_cookies(response)
 
         #Delete an image from aws s3 and the way to the image from redis if exists
-        user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id_access)
+        user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
+
+        if user is None:
+            raise ResourceNotFound("User is not found")
+
         if user.image_s3_path:
             await delete_file(bucket, user.image_s3_path)
-            await delete_presigned_url_from_redis(current_user.user_id_access)
+            await delete_presigned_url_from_redis(current_user.user_id)
 
-        await UserDAO.delete_by_id(db, current_user.user_id_access)
+        await UserDAO.delete_by_id(db, current_user.user_id)
         await db.commit()
 
         return {"detail": "A user profile was deleted."}
@@ -104,22 +119,22 @@ async def patch_me(
         data: ProfileUserPatch,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Return an updated user profile information.
 
     Args:
         db (AsyncSession): Database session.
         data (ProfileUserPatch): Incoming neu user data.
-        current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser): A user data from JWT access token for getting a user profile.
     Returns:
-        ProfileUserResponse: Partially updated user profile information.
+        UserResponse: Updated user profile information.
     """
-    updated_user = await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
-
+    await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
     await db.commit()
 
-    return ProfileUserResponse.model_validate(updated_user)
+    user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+    return serialise_user_data(user)
 
 
 async def get_avatar(
@@ -133,7 +148,7 @@ async def get_avatar(
 
     Args:
         db (AsyncSession): Database session.
-        current_user (CurrentUser) : A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser) : A user data from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
         region_name
     Returns:
@@ -142,6 +157,13 @@ async def get_avatar(
     presigned_url = await get_presigned_url_from_redis(current_user.user_id)
     if not presigned_url:
         user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
+
+        if user is None:
+            raise ResourceNotFound("User is not found")
+
+        if user.image_s3_path is None:
+            raise S3StorageError("A way to the avatar in the database is not exist.")
+
         presigned_url = await create_presigned_url(bucket, user.image_s3_path, region_name, expiration=3600)
         await save_presigned_url_to_redis(presigned_url, current_user.user_id)
     return PresignUrlGet(presigned_url=presigned_url)
@@ -178,130 +200,161 @@ async def confirm_avatar(
         bucket: str = settings.bucket_name,
         region_name: str = settings.aws_region,
 
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Return a presign url for an avatar usage.
 
     Args:
         body (ConfirmAvatarRequest): Contains key, a path to a new avatar user.
         db (AsyncSession): Database session.
-        current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser): A user data from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
         region_name: AWS region where the s3 bucket is located.
     Returns:
-         ProfileUserResponse: Partially updated user profile information.
+         UserResponse: Partially updated user profile information.
     """
     new_image_s3_path = body.key
 
     user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
 
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
     if user.image_s3_path:
         await delete_file(bucket, user.image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
 
-    updated_user = await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
+    await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
     await db.commit()
+
     presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
     await save_presigned_url_to_redis(presigned_url, current_user.user_id)
 
-    return ProfileUserResponse.model_validate(updated_user)
+    user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+    return serialise_user_data(user)
 
 
 async def delete_avatar(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
-) -> ProfileUserResponse:
+) -> UserResponse:
     """
     Return a presign url for an avatar usage.
 
     Args:
         db (AsyncSession): Database session.
-        current_user (CurrentUser): A user ID from JWT access token for getting a user profile.
+        current_user (CurrentUser): A user data from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
     Returns:
-         ProfileUserResponse: Partially updated user profile information.
+         UserResponse: Partially updated user profile information.
     """
     user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
+
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
     if user.image_s3_path:
         await delete_file(bucket, user.image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
-        user = await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
+        await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
         await db.commit()
-    return ProfileUserResponse.model_validate(user)
+
+    user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+    return serialise_user_data(user)
 
 
 async def get_user(
         user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> GetUserResponse | None:
+) -> UserResponse | None:
+    """
+    Get information about a user profile by ID.
 
+    Args:
+        user_id: ID user for getting information about this user.
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+    Returns:
+        UserResponse: An information about a user profile by ID.
+    """
     if "ADMIN" in current_user.roles:
         user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
-        roles = [role.role_name.value for role in user.roles]
-        group_name = user.group.name if user.group else None
         if not user:
             raise ResourceNotFound("User is not found")
-
 
     elif "MODERATOR" in current_user.roles:
         user = await UserDAO.find_one_or_none_with_related_data(db, and_(User.id == user_id, User.group_id == current_user.group_id))
         if not user:
             raise AuthorizationError("Not allowed")
-        roles = [role.role_name.value for role in user.roles]
-        group_name = user.group.name if user.group else None
-
     else:
         raise AuthorizationError("Not allowed")
 
-    return GetUserResponse(
-        name=user.name,
-        surname=user.surname,
-        username=user.username,
-        phone_number=user.phone_number,
-        email=user.email,
-        is_blocked=user.is_blocked,
-        created_at=user.created_at,
-        modified_at=user.modified_at,
-        group_name=group_name,
-        role=roles
-    )
+    return serialise_user_data(user)
+
 
 async def patch_user(
         user_id: str,
-        data: UserPatch,
+        data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
-) -> ProfileUserResponse | None:
+) -> UserResponse:
+    """
+    Get information about a user profile by ID.
+
+    Args:
+        user_id: ID user for getting information about this user.
+        data (UserPatchByAdmin):  Incoming new user data.
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+    Returns:
+        UserResponse: Updated user profile information.
+    """
     if "ADMIN" in current_user.roles:
-        updated_user = await UserDAO.patch_by_id(db, user_id, data.model_dump(exclude_unset=True))
+        data_user = data.model_dump(exclude_unset=True)
+        roles_id = data_user.pop("roles_id", None)
+        await UserDAO.patch_by_id(db, user_id, data_user)
+
+        if roles_id is not None:
+            await UserDAO.update_user_role(db, user_id, roles_id)
         await db.commit()
+        user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
+
     else:
         raise AuthorizationError("Not allowed")
 
-    return ProfileUserResponse.model_validate(updated_user)
+    return serialise_user_data(user)
 
 
-async def get_response_list(list_users):
-    new_list = []
+async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
+    """
+    Create serialized list users for a role (admin, moderator).
+    """
+    new_list: list[UserResponse] = []
     for user in list_users:
-        roles = [role.role_name.value for role in user.roles]
-        group_name = user.group.name if user.group else None
-        user = GetUserResponse(
-            name=user.name,
-            surname=user.surname,
-            username=user.username,
-            phone_number=user.phone_number,
-            email=user.email,
-            is_blocked=user.is_blocked,
-            created_at=user.created_at,
-            modified_at=user.modified_at,
-            group_name=group_name,
-            role=roles
-            )
-        new_list.append(user)
+        user_serialized = serialise_user_data(user)
+        new_list.append(user_serialized)
     return new_list
+
+
+async def get_list_users_from_redis(role: str) -> list[dict[str, Any]] | None:
+    """
+    Get users from redis.
+    """
+    try:
+        list_users = await r.get(f"list_users:{role}")
+        return json.loads(list_users)
+    except:
+        return None
+
+
+async def save_list_users_to_redis(users: list[dict[str, Any]], role: str ) -> None:
+    """
+    Save users to redis.
+    """
+    ttl = timedelta(seconds=3600)
+    await r.setex(f"list_users:{role}", int(ttl.total_seconds()), json.dumps(users))
 
 
 async def get_users(
@@ -309,22 +362,55 @@ async def get_users(
         current_user: CurrentUser = Depends(get_current_user),
         user_filter: UserFilter = Depends(),
         pagination: UserPagination = Depends()
-):
+) -> dict[str, Any]:
+    """
+    Get information about a user profile by ID.
+
+    Args:
+        db (AsyncSession): Database session.
+        current_user (CurrentUser): A user (admin, moderator) ID from JWT access token who requests information.
+        user_filter (UserFilter): A schema for filter and sorting information for loading.
+        pagination (UserPagination): Pagination for list of users.
+    Returns:
+        dict : Data for each role of current user.
+    """
     response = {}
     roles = {
         "ADMIN": None,
         "MODERATOR": User.group_id == current_user.group_id
     }
+
+    # Raise error if a user has only USER role.
+    if current_user.roles == ["USER"]:
+        raise AuthorizationError("Not allowed")
+
     for role, condition in roles.items():
-        if role in current_user.roles:
+        # Check allowed role.
+        if not role in current_user.roles:
+            continue
+
+        # Get data from redis.
+        users_list_from_redis = await get_list_users_from_redis(role)
+
+        if users_list_from_redis:
+            users_list = [UserResponse(**user) for user in users_list_from_redis]
+        else:
+            # Get data from database if data from redis is unavailable.
             if condition is not None:
                 users = await UserDAO.get_all(db, condition)
             else:
                 users = await UserDAO.get_all(db)
-            filtered_users = user_filter.filter_users(users)
-            sorted_users = user_filter.sort_users(filtered_users)
-            users_list = await get_response_list(sorted_users)
-            response[f'{role}'] = paginate(users_list, pagination)
-        else:
-            continue
+
+            # Get serialized list of users
+            users_list = await get_response_list(users)
+
+            # Cache data to redis.
+            users_to_redis = [user.model_dump(mode='json') for user in users_list]
+            await save_list_users_to_redis(users_to_redis, role)
+
+        # Filter and sort users for response.
+        filtered_users = user_filter.filter_users(users_list)
+        sorted_users = user_filter.sort_users(filtered_users)
+        response[f'{role}'] = paginate(sorted_users, pagination)
+
     return response

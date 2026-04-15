@@ -1,7 +1,10 @@
 """
 Data Access Object for user-related database operations.
 """
-from sqlalchemy import insert
+import uuid
+from typing import Any
+
+from sqlalchemy import insert, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
@@ -13,7 +16,7 @@ from ..models.assotiations import user_role
 from ..models.roles import StatusRole
 
 
-class UserDAO(BaseDAO):
+class UserDAO(BaseDAO[User]):
     model = User
 
 
@@ -51,7 +54,6 @@ class UserDAO(BaseDAO):
         return result.scalar_one_or_none()
 
 
-
     @classmethod
     async def get_all(cls, db: AsyncSession, where=None):
         query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group))
@@ -61,3 +63,41 @@ class UserDAO(BaseDAO):
 
         result = await db.execute(query)
         return result.scalars().all()
+
+    @classmethod
+    async def patch_by_id(cls, db: AsyncSession, user_id: str, data: dict[str, Any]) -> None:
+        """
+        Patch a user to the session without commiting.
+        """
+        user_id = uuid.UUID(user_id)
+        renew_instance = await db.get(cls.model, user_id)
+
+        for field, value in data.items():
+            setattr(renew_instance, field, value)
+
+
+    @classmethod
+    async def update_user_role(cls, db: AsyncSession, user_id: str, roles_id: list[int] ) -> None:
+        """
+        Update roles for user in user_role table without commiting.
+        """
+        user_id = uuid.UUID(user_id)
+        await db.execute(
+            delete(user_role).where(user_role.c.user_id == user_id)
+        )
+
+        if roles_id is not None:
+            await db.execute(
+                insert(user_role),
+                [{"user_id": user_id, "role_id": role_id} for role_id in roles_id]
+            )
+
+    @classmethod
+    async def delete_by_id(cls, db: AsyncSession, user_id: str) -> None:
+        """
+        Delete a user to the session without commiting.
+        """
+        user_id = uuid.UUID(user_id)
+        instance = await db.get(cls.model, user_id)
+        await db.delete(instance)
+        await db.flush()
