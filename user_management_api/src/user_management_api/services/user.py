@@ -380,10 +380,6 @@ async def get_users(
         "MODERATOR": User.group_id == current_user.group_id
     }
 
-    # Raise error if a user has only USER role.
-    if current_user.roles == ["USER"]:
-        raise AuthorizationError("Not allowed")
-
     for role, condition in roles.items():
         # Check allowed role.
         if not role in current_user.roles:
@@ -412,5 +408,9 @@ async def get_users(
         filtered_users = user_filter.filter_users(users_list)
         sorted_users = user_filter.sort_users(filtered_users)
         response[f'{role}'] = paginate(sorted_users, pagination)
+
+    # Raise error for roles except admin and moderator.
+    if response == {}:
+        raise AuthorizationError("Not allowed")
 
     return response
