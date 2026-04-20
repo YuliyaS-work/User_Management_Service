@@ -7,13 +7,20 @@ replace a file, cache a file.
 import logging
 import time
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from botocore.exceptions import ClientError
+import aioboto3
 
-from src.user_management_api.core.config import r, s3_session
+from src.user_management_api.core.config import r, settings
 from src.user_management_api.exceptions.user import S3StorageError
 
+
+s3_session = aioboto3.Session(
+    aws_access_key_id=settings.aws_access_key_id,
+    aws_secret_access_key=settings.aws_secret_access_key,
+    region_name=settings.aws_region,
+)
 
 def generate_image_s3_path(user_id: str) -> str:
     """
@@ -76,11 +83,11 @@ async def create_presigned_url(
         raise S3StorageError("A way to the avatar in the database is not exist.")
     try:
         async with s3_session.client("s3", region_name=region_name) as s3:
-            presigned_url = await s3.generate_presigned_url(
+            presigned_url = cast( str, await s3.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": image_s3_path},
                 ExpiresIn=expiration,
-            )
+            ))
             return presigned_url
     except ClientError as e:
         logging.error(e)
@@ -110,6 +117,6 @@ async def get_presigned_url_from_redis(user_id: str) ->str | None:
     Get predesign_url from redis.
     """
     try:
-        return await r.get(f"presigned_url:{user_id}")
+        return cast( str | None, await r.get(f"presigned_url:{user_id}"))
     except:
         return None

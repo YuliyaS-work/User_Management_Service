@@ -58,10 +58,10 @@ class ProfileUserPatch(BaseModel):
         return validate_phone_number_signup(value)
 
     @model_validator(mode="after")
-    def ensure_not_empty_data(cls, value):
-        if not value.model_dump(exclude_unset=True):
+    def ensure_not_empty_data(self) -> "ProfileUserPatch":
+        if not self.model_dump(exclude_unset=True):
             raise ValueError("At least one field must be provided for update.")
-        return value
+        return self
 
 class UserPatchByAdmin(ProfileUserPatch):
     """
@@ -159,8 +159,10 @@ class UserFilter(Filter):
         if not self.sort_field:
             return users_list
 
+        sort_field = self.sort_field
+
         #Check the field in attributes of model.
-        if not hasattr(User, self.sort_field):
+        if not hasattr(User, sort_field):
             return users_list
 
         #Orderinf list of users.
@@ -168,4 +170,4 @@ class UserFilter(Filter):
             reverse = True
         else:
             reverse = False
-        return sorted(users_list, key=lambda user: getattr(user, self.sort_field), reverse=reverse)
+        return sorted(users_list, key=lambda user: getattr(user, sort_field), reverse=reverse)

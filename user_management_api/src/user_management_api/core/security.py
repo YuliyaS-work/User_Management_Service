@@ -14,7 +14,8 @@ from datetime import datetime, timedelta, timezone
 
 from src.user_management_api.core.config import settings, r
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken
+from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken, \
+    PayloadTokenBase
 
 pwd = PasswordHash.recommended()
 
@@ -58,28 +59,47 @@ def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     return encode_jwt, jti
 
 
-def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | None:
+def create_reset_password_token(email: str) -> str:
+    """
+    Create a JWT reset password token using a secret_key and an algorithm.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    jti = str(uuid.uuid4())
+    data_to_encode = {"sub": email, "type": "reset_password", "exp": expire, "jti": jti}
+    token = jwt.encode(data_to_encode, settings.secret_key, algorithm=settings.algorithm)
+    return token
+
+
+def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | PayLoadResetPasswordToken:
     """
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
     try:
-        payload: PayLoadAccessToken | PayLoadRefreshToken | None = None
-        payload_decoded = jwt.decode(token, settings.secret_key, settings.algorithm)
-        if payload_decoded["type"] == "access":
-            payload = PayLoadAccessToken(**payload_decoded)
-        if payload_decoded["type"] == "refresh":
-            payload = PayLoadRefreshToken(**payload_decoded)
-        return payload
+        payload_decoded = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        if not payload_decoded:
+            raise AuthenticationException(detail="Token invalid")
+
+        token_type = payload_decoded.get("type")
+        if token_type == "access":
+            return PayLoadAccessToken(**payload_decoded)
+        elif token_type =="refresh":
+            return PayLoadRefreshToken(**payload_decoded)
+        elif token_type == "reset_password":
+            return PayLoadResetPasswordToken(**payload_decoded)
+        else:
+            raise AuthenticationException("Unknown token type")
+
     except JWTError:
-        return None
+        raise AuthenticationException(detail="Token invalid")
 
 
-def validate_access_token(payload: PayLoadAccessToken | None) -> bool:
+
+def validate_access_token(payload: PayLoadAccessToken) -> bool:
     """
     Validate provided JWT access token.
     """
-    if not payload:
-        raise AuthenticationException(detail="Token invalid")
+    if not isinstance(payload, PayLoadAccessToken):
+        raise AuthenticationException(detail="Invalid token type")
 
     # Check expire time  for access token.
     expire = payload.exp
@@ -95,12 +115,12 @@ def validate_access_token(payload: PayLoadAccessToken | None) -> bool:
     return True
 
 
-async def validate_refresh_token( payload: PayLoadRefreshToken | None, hash_token: str) -> tuple[str, str]:
+async def validate_refresh_token( payload: PayLoadRefreshToken, hash_token: str) -> tuple[str, str]:
     """
     Validate provided JWT refresh token.
     """
-    if not payload:
-        raise AuthenticationException(detail="Token invalid")
+    if not isinstance(payload, PayLoadRefreshToken):
+        raise AuthenticationException(detail="Invalid token type")
 
     jti = payload.jti
     expire = payload.exp
@@ -125,3 +145,23 @@ async def validate_refresh_token( payload: PayLoadRefreshToken | None, hash_toke
         raise AuthenticationException(detail="Token is not current")
 
     return user_id, jti
+
+
+def validate_reset_password_token(payload: PayLoadResetPasswordToken) -> bool:
+    """
+    Validate provided JWT reset password token.
+    """
+    if not isinstance(payload, PayLoadResetPasswordToken):
+        raise AuthenticationException(detail="Invalid token type")
+
+    # Check expire time  for access token.
+    expire = payload.exp
+    expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
+    if (not expire) or (expire_time < datetime.now(timezone.utc)):
+        raise AuthenticationException(detail="Token is over")
+
+    # Check email to ensure that it's authentic
+    if not payload.sub:
+        raise AuthenticationException(detail="Email not found")
+
+    return True

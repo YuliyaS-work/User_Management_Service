@@ -12,11 +12,14 @@ class APIException(HTTPException):
     """
     Base class for all API exceptions.
     """
-    status_code: int
-    detail: str
-    def __init__(self, detail: str ):
-        # self.detail = detail
-        super().__init__(status_code=self.status_code, detail = detail)
+    status_code: int = 500
+    detail: str = "Internal server error"
+
+    def __init__(self, detail: str | None = None ):
+        super().__init__(
+            status_code=self.status_code,
+            detail = detail or self.detail
+        )
 
 class AuthenticationException(APIException):
     """

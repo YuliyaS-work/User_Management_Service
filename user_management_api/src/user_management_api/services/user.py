@@ -344,7 +344,8 @@ async def get_list_users_from_redis(role: str) -> list[dict[str, Any]] | None:
     """
     try:
         list_users = await r.get(f"list_users:{role}")
-        return json.loads(list_users)
+        data: list[dict[str, Any]] = json.loads(list_users)
+        return data
     except:
         return None
 

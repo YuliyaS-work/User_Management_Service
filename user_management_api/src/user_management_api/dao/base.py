@@ -1,9 +1,9 @@
 """
 Base class for Data Access Objects.
 """
-import uuid
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Any, Optional
 
+from sqlalchemy import ColumnElement
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
@@ -15,7 +15,7 @@ class BaseDAO(Generic[ModelType]):
     model: type[ModelType]
 
     @classmethod
-    async def find_one_or_none(cls, db: AsyncSession, where=None,  **filters) -> ModelType | None:
+    async def find_one_or_none(cls, db: AsyncSession, where: Optional[ColumnElement[bool]]=None,  **filters: Any) -> ModelType | None:
         """
         Find a single record matching the filter or/and the condition or return None.
         """
@@ -32,7 +32,7 @@ class BaseDAO(Generic[ModelType]):
 
 
     @classmethod
-    async def add(cls, db: AsyncSession, **values) -> ModelType:
+    async def add(cls, db: AsyncSession, **values: Any) -> ModelType:
         """
         Add a new instance to the session without commiting.
         """
