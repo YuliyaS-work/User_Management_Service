@@ -14,8 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.user_management_api.core.config import settings, r
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken, \
-    PayloadTokenBase
+from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken
 
 pwd = PasswordHash.recommended()
 
@@ -66,7 +65,7 @@ def create_reset_password_token(email: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     jti = str(uuid.uuid4())
     data_to_encode = {"sub": email, "type": "reset_password", "exp": expire, "jti": jti}
-    token = jwt.encode(data_to_encode, settings.secret_key, algorithm=settings.algorithm)
+    token: str = jwt.encode(data_to_encode, settings.secret_key, algorithm=settings.algorithm)
     return token
 
 
@@ -91,7 +90,6 @@ def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | PayLo
 
     except JWTError:
         raise AuthenticationException(detail="Token invalid")
-
 
 
 def validate_access_token(payload: PayLoadAccessToken) -> bool:

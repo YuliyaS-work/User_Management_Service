@@ -7,7 +7,7 @@ replace a file, cache a file.
 import logging
 import time
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any
 
 from botocore.exceptions import ClientError
 import aioboto3
@@ -56,7 +56,7 @@ async def create_presigned_post(
         raise S3StorageError("A path to the avatar in the database is not exist.")
     try:
         async with s3_session.client("s3", region_name=region_name) as s3:
-            post = await s3.generate_presigned_post(
+            post: dict[str, Any] = await s3.generate_presigned_post(
                 Bucket=bucket,
                 Key=image_s3_path,
                 Fields={'Content-Type': 'image/*'},
@@ -83,11 +83,11 @@ async def create_presigned_url(
         raise S3StorageError("A way to the avatar in the database is not exist.")
     try:
         async with s3_session.client("s3", region_name=region_name) as s3:
-            presigned_url = cast( str, await s3.generate_presigned_url(
+            presigned_url: str = await s3.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": image_s3_path},
                 ExpiresIn=expiration,
-            ))
+            )
             return presigned_url
     except ClientError as e:
         logging.error(e)
@@ -117,6 +117,7 @@ async def get_presigned_url_from_redis(user_id: str) ->str | None:
     Get predesign_url from redis.
     """
     try:
-        return cast( str | None, await r.get(f"presigned_url:{user_id}"))
+        presigned_url: str | None = await r.get(f"presigned_url:{user_id}")
+        return presigned_url
     except:
         return None
