@@ -3,12 +3,14 @@ The module providing handlers for the user information in a profile,
 including  operations.
 """
 import json
+import logging
 from datetime import timedelta
 from operator import and_
 from typing import Any, Sequence
 
 from fastapi import Depends, Request, Response
 from fastapi_pagination import paginate
+from redis import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings, r
@@ -27,6 +29,8 @@ from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet
 from src.user_management_api.services.auth import delete_refresh_token_from_redis, verify_refresh_token, \
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
+
+logger = logging.getLogger(__name__)
 
 
 def serialise_user_data(user: User | None) -> UserResponse:
@@ -64,8 +68,12 @@ async def get_me(
     Returns:
         UserResponse: The profile information for an authenticated user.
     """
+    logger.info(f"Start: fetch user data by ID={current_user.user_id}")
+
     # Get user by ID.
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+
+    logger.info("Success: getting serialized user data.")
 
     return serialise_user_data(user)
 
@@ -89,6 +97,8 @@ async def delete_me(
     Returns:
         dict: The message about deletion of a user.
     """
+    logger.info(f"Start: deleting user token and data by ID={current_user.user_id}")
+
     #Verify refresh token to delete from redis.
     user_id_refresh, jti = await verify_refresh_token(request)
 
@@ -110,6 +120,8 @@ async def delete_me(
         await UserDAO.delete_by_id(db, current_user.user_id)
         await db.commit()
 
+        logger.info("Success: deleting user data")
+
         return {"detail": "A user profile was deleted."}
     else:
         raise AuthenticationException
@@ -130,10 +142,14 @@ async def patch_me(
     Returns:
         UserResponse: Updated user profile information.
     """
+    logger.info(f"Start: patch user data by ID={current_user.user_id}")
+
     await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
     await db.commit()
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+
+    logger.info("Success: getting patched serialized user data")
     return serialise_user_data(user)
 
 
@@ -154,6 +170,8 @@ async def get_avatar(
     Returns:
         PresignUrlGet: Presign url from redis to an avatar usage.
     """
+    logger.info("Start: fetch user avatar")
+
     presigned_url = await get_presigned_url_from_redis(current_user.user_id)
     if not presigned_url:
         user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
@@ -166,6 +184,9 @@ async def get_avatar(
 
         presigned_url = await create_presigned_url(bucket, user.image_s3_path, region_name, expiration=3600)
         await save_presigned_url_to_redis(presigned_url, current_user.user_id)
+
+    logger.info("Success: getting user avatar")
+
     return PresignUrlGet(presigned_url=presigned_url)
 
 
@@ -184,13 +205,20 @@ async def get_presigned_post(
     Returns:
         PresignedPostResponse: Data required to upload the file to s3 directly.
     """
+    logger.info("Start: sending user avatar to s3.")
+
     new_image_s3_path = generate_image_s3_path(current_user.user_id)
     post = await create_presigned_post(bucket, new_image_s3_path, region_name, expiration=3600)
-    return PresignedPostResponse(
+
+    post_response =  PresignedPostResponse(
         key=new_image_s3_path,
         url=post["url"],
         fields=post["fields"]
     )
+
+    logger.info("Success: user avatar was sent to s3")
+
+    return post_response
 
 
 async def confirm_avatar(
@@ -213,6 +241,8 @@ async def confirm_avatar(
     Returns:
          UserResponse: Partially updated user profile information.
     """
+    logger.info("Start: confirm saving user avatar path into the DB")
+
     new_image_s3_path = body.key
 
     user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
@@ -231,6 +261,9 @@ async def confirm_avatar(
     await save_presigned_url_to_redis(presigned_url, current_user.user_id)
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+
+    logger.info("Success: user avatar path is saved into the DB")
+
     return serialise_user_data(user)
 
 
@@ -249,6 +282,8 @@ async def delete_avatar(
     Returns:
          UserResponse: Partially updated user profile information.
     """
+    logger.info("Start: deleting user avatar from s3")
+
     user = await UserDAO.find_one_or_none(db, User.id == current_user.user_id)
 
     if user is None:
@@ -261,6 +296,9 @@ async def delete_avatar(
         await db.commit()
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
+
+    logger.info("Success: user avatar was deleted")
+
     return serialise_user_data(user)
 
 
@@ -279,6 +317,8 @@ async def get_user(
     Returns:
         UserResponse: An information about a user profile by ID.
     """
+    logger.info(f"Start: fetch user data by ID={user_id} for ADMIN/MODERATOR role.")
+
     if "ADMIN" in current_user.roles:
         user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
         if not user:
@@ -290,6 +330,8 @@ async def get_user(
             raise AuthorizationError("Not allowed")
     else:
         raise AuthorizationError("Not allowed")
+
+    logger.info("Success: getting serialized user data")
 
     return serialise_user_data(user)
 
@@ -311,6 +353,8 @@ async def patch_user(
     Returns:
         UserResponse: Updated user profile information.
     """
+    logger.info(f"Start: patch user data by ID={user_id} for ADMIN.")
+
     if "ADMIN" in current_user.roles:
         data_user = data.model_dump(exclude_unset=True)
         roles_id = data_user.pop("roles_id", None)
@@ -323,6 +367,8 @@ async def patch_user(
 
     else:
         raise AuthorizationError("Not allowed")
+
+    logger.info("Success: getting patched serialized user data for ADMIN")
 
     return serialise_user_data(user)
 
@@ -342,11 +388,21 @@ async def get_list_users_from_redis(role: str) -> list[dict[str, Any]] | None:
     """
     Get users from redis.
     """
+    logger.info("Start: fetch users list from redis")
     try:
         list_users = await r.get(f"list_users:{role}")
+
+        if not list_users:
+            logger.info("Redis: users list wasn't found")
+            return None
+
         data: list[dict[str, Any]] = json.loads(list_users)
+
+        logger.info("Success: users list was fetched from redis")
+
         return data
-    except:
+    except RedisError as e:
+        logger.warning(f"Redis error: {e}")
         return None
 
 
@@ -354,8 +410,15 @@ async def save_list_users_to_redis(users: list[dict[str, Any]], role: str ) -> N
     """
     Save users to redis.
     """
-    ttl = timedelta(seconds=3600)
-    await r.setex(f"list_users:{role}", int(ttl.total_seconds()), json.dumps(users))
+    logger.info("Start: saving users list to redis")
+
+    try:
+        ttl = timedelta(seconds=3600)
+        await r.setex(f"list_users:{role}", int(ttl.total_seconds()), json.dumps(users))
+        logger.info("Success: users list was saved to redis")
+    except RedisError as e:
+        logger.warning(f"Redis error: {e}")
+        pass
 
 
 async def get_users(
@@ -375,6 +438,8 @@ async def get_users(
     Returns:
         dict : Data for each role of current user.
     """
+    logger.info(f"Start: fetch users list for ADMIN/MODERATOR role.")
+
     response = {}
     roles = {
         "ADMIN": None,
@@ -413,5 +478,7 @@ async def get_users(
     # Raise error for roles except admin and moderator.
     if response == {}:
         raise AuthorizationError("Not allowed")
+
+    logger.info(f"Success: getting serialized users list data.")
 
     return response

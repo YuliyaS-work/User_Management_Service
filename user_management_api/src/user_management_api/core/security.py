@@ -5,6 +5,7 @@ Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
 import hashlib
+import logging
 import uuid
 from typing import Any
 
@@ -12,9 +13,13 @@ from pwdlib import PasswordHash
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
+from redis import RedisError
+
 from src.user_management_api.core.config import settings, r
 from src.user_management_api.exceptions.auth import AuthenticationException
 from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken
+
+logger = logging.getLogger(__name__)
 
 pwd = PasswordHash.recommended()
 
@@ -135,8 +140,11 @@ async def validate_refresh_token( payload: PayLoadRefreshToken, hash_token: str)
         raise AuthenticationException(detail="User ID not found")
 
     # Check refresh token in blacklist.
-    if await r.get(f"revoked_token:{user_id}:{jti}"):
-        raise AuthenticationException(detail="Token has been revoked")
+    try:
+        if await r.get(f"revoked_token:{user_id}:{jti}"):
+            raise AuthenticationException(detail="Token has been revoked")
+    except RedisError as e:
+        logger.warning(f"Redis error: {e}")
 
     # Check hash of a provided refresh token with hash in redis.
     if hash_token != saved_hash:

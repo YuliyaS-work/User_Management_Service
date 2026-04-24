@@ -5,7 +5,6 @@ class S3StorageError(APIException):
     """
     Raised when errors exist while working with s3 storage.
     """
-    status_code: int = 500
     detail: str = "Error while working with s3 storage."
 
 

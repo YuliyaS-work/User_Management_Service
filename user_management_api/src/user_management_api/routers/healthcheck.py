@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from src.user_management_api.schemas.healthcheck import HealthResponse
 
-health_router = APIRouter(prefix="/system")
+health_router = APIRouter(prefix="/system", tags=["System"])
 
 @health_router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
