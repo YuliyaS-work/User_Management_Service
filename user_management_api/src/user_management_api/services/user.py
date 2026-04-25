@@ -10,7 +10,6 @@ from typing import Any, Sequence
 
 from fastapi import Depends, Request, Response
 from fastapi_pagination import paginate
-from redis import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings, r
@@ -30,6 +29,7 @@ from src.user_management_api.services.auth import delete_refresh_token_from_redi
     get_current_user
 from src.user_management_api.utils.auth import delete_tokens_from_cookies
 
+# Create a module specific logger
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +46,7 @@ def serialise_user_data(user: User | None) -> UserResponse:
         username=user.username,
         phone_number=user.phone_number,
         email=user.email,
+        image_s3_path=user.image_s3_path,
         is_blocked=user.is_blocked,
         created_at=user.created_at,
         modified_at=user.modified_at,
@@ -401,7 +402,7 @@ async def get_list_users_from_redis(role: str) -> list[dict[str, Any]] | None:
         logger.info("Success: users list was fetched from redis")
 
         return data
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
         return None
 
@@ -416,7 +417,7 @@ async def save_list_users_to_redis(users: list[dict[str, Any]], role: str ) -> N
         ttl = timedelta(seconds=3600)
         await r.setex(f"list_users:{role}", int(ttl.total_seconds()), json.dumps(users))
         logger.info("Success: users list was saved to redis")
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
         pass
 

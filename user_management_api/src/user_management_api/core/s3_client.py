@@ -16,6 +16,7 @@ from redis import RedisError
 from src.user_management_api.core.config import r, settings
 from src.user_management_api.exceptions.user import S3StorageError
 
+# Create a module specific logger
 logger = logging.getLogger(__name__)
 
 s3_session = aioboto3.Session(
@@ -45,8 +46,8 @@ async def delete_file(bucket: str, image_s3_path: str) -> None:
 
         logger.info(f"Success: file from s3 was deleted, bucket={bucket}, key={image_s3_path}")
 
-    except ClientError as e:
-        logging.exception(
+    except ClientError:
+        logger.exception(
             "S3 rejected the request",
             extra={"bucket": bucket, "key": image_s3_path}
         )
@@ -62,7 +63,7 @@ async def create_presigned_post(
     """
     Generate a presigned URL to share an S3 object.
     """
-    logger.info(f"Start: saving user avatar to s3, bucket={bucket}, key={image_s3_path}")
+    logger.info(f"Start: generating presigned post to avatar upload, bucket={bucket}, key={image_s3_path}")
 
     if not image_s3_path:
         raise S3StorageError("A path to the avatar in the database is not exist.")
@@ -79,15 +80,15 @@ async def create_presigned_post(
                 ExpiresIn=expiration
             )
 
-            logger.info(f"Success: user avatar was saved to s3, bucket={bucket}, key={image_s3_path}")
+            logger.info(f"Success: presigned post to avatar upload was generated, bucket={bucket}, key={image_s3_path}")
 
             return post
-    except ClientError as e:
-        logging.exception(
+    except ClientError:
+        logger.exception(
             "S3 rejected the request",
             extra={"bucket": bucket, "key": image_s3_path}
         )
-        raise S3StorageError("The presigned post is not generated")
+        raise S3StorageError("Presigned post is not generated")
 
 async def create_presigned_url(
         bucket: str,
@@ -112,8 +113,8 @@ async def create_presigned_url(
             logger.info(f"Success: presigned url avatar was created, bucket={bucket}, key={image_s3_path}")
 
             return presigned_url
-    except ClientError as e:
-        logging.exception(
+    except ClientError:
+        logger.exception(
             "S3 rejected the request",
             extra={"bucket": bucket, "key": image_s3_path}
         )
@@ -130,7 +131,7 @@ async def save_presigned_url_to_redis(presigned_url: str, user_id: str) -> None:
         await r.setex(f"presigned_url:{user_id}", int(ttl.total_seconds()), presigned_url)
 
         logger.info(f"Success: presigned url avatar was saved to redis, ulr={presigned_url}, user ID={user_id}")
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
         pass
 
@@ -145,7 +146,7 @@ async def delete_presigned_url_from_redis(user_id: str) -> None:
         await r.delete(f"presigned_url:{user_id}")
 
         logger.info(f"Success: presigned url avatar was deleted from redis for user ID={user_id}")
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
         pass
 
@@ -161,6 +162,6 @@ async def get_presigned_url_from_redis(user_id: str) ->str | None:
 
         logger.info(f"Success: available presigned url avatar was fetched from redis")
         return presigned_url
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
         return None

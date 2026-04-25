@@ -5,10 +5,12 @@ import logging.config
 from logging.handlers import QueueListener
 from queue import Queue
 
+from fastapi import FastAPI
+
 log_queue: Queue[str] = Queue()
 
 
-def setup_logging() -> None:
+def setup_logging(app: FastAPI) -> None:
     """
     Configure logging based on the environment.
     """
@@ -60,3 +62,5 @@ def setup_logging() -> None:
     )
 
     listener.start()
+
+    app.state.log_listener = listener

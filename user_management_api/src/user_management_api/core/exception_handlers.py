@@ -5,7 +5,6 @@ Converts APIException instances into consistent JSON error responses
 with the appropriate HTTP status code and messages.
 """
 import logging
-import traceback
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -13,8 +12,9 @@ from fastapi.responses import JSONResponse
 from src.user_management_api.exceptions.auth import APIException
 from src.user_management_api.schemas.auth import APIErrorResponse
 
-
+# Create a module specific logger
 logger = logging.getLogger(__name__)
+
 
 async def api_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
@@ -27,17 +27,15 @@ async def api_exception_handler(request: Request, exc: Exception) -> JSONRespons
             content=APIErrorResponse.from_exception(exc).model_dump()
         )
 
-    logger.exception("Unhandled exception at %s | %s: %s, %s",
+    logger.exception("Unhandled exception at %s | %s: %s",
                      request.url.path,
-                     type(exc).__name__, str(exc),
-                     traceback.format_exc()
+                     type(exc).__name__,
+                     str(exc),
                      )
 
     return JSONResponse(
             status_code=500,
             content={
-                "error_name": type(exc).__name__,
-                "error_message": str(exc),
-                "trace": traceback.format_exc()
-            }
+                "status_code": 500,
+                "detail": "Internal server error"}
         )

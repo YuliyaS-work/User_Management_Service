@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from src.user_management_api.core.config import settings
 
+# Create a module specific logger
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -37,8 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Queue 'reset-password-stream' was declared")
 
         yield
-    # try:
-    #     yield
+
     except Exception:
         logger.exception("Failed to initialized RabbitMq")
         raise

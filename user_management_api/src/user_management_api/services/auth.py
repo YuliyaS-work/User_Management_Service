@@ -10,7 +10,6 @@ from datetime import timedelta, datetime, timezone
 import phonenumbers
 from fastapi import Response, Request, BackgroundTasks, status
 from phonenumbers.phonenumberutil import NumberParseException
-from redis import RedisError
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +28,7 @@ from src.user_management_api.utils.auth import send_tokens_to_user, delete_token
     get_refresh_token_from_cookie, get_access_token_from_cookie
 from src.user_management_api.core.config import r
 
+# Create a module specific logger
 logger = logging.getLogger(__name__)
 
 
@@ -79,7 +79,7 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
         await r.delete(f"refresh_token:{user_id}")
         await r.set(f"revoked_token:{user_id}:{jti}", "true")
         logger.info(f"Success: refresh token was deleted from redis for user ID={user_id}")
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
 
 
@@ -95,7 +95,7 @@ async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str
         await r.setex(f"refresh_token:{user_id}", int(ttl.total_seconds()), token_hash)
         logger.info(f"Success: refresh token was saved to redis for user ID={user_id}")
 
-    except RedisError as e:
+    except Exception as e:
         logger.warning(f"Redis error: {e}")
 
 
@@ -233,7 +233,7 @@ async def logout_user(
     try:
         user_id, jti = await verify_refresh_token(request)
         await delete_refresh_token_from_redis(user_id, jti)
-        logger.info(f"Success: user logged in: user ID={user_id}")
+        logger.info(f"Success: user logged out: user ID={user_id}")
         return {"message": "User logged out"}
     finally:
         delete_tokens_from_cookies(response)
