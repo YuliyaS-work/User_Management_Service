@@ -13,8 +13,9 @@ from pwdlib import PasswordHash
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
-from src.user_management_api.core.config import settings, r
+from src.user_management_api.core.config import settings
 from src.user_management_api.exceptions.auth import AuthenticationException
+from src.user_management_api.redis.redis_config import r
 from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken
 
 # Create a module specific logger

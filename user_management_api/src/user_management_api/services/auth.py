@@ -5,7 +5,7 @@ reset a user's password and save a new user's password into tha database.
 """
 import json
 import logging
-from datetime import timedelta, datetime, timezone
+from datetime import datetime, timezone
 
 import phonenumbers
 from fastapi import Response, Request, BackgroundTasks, status
@@ -20,13 +20,14 @@ from src.user_management_api.exceptions.auth import ConflictException, APIExcept
 from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
 from src.user_management_api.rabbitmq.publisher import publish_message
+from src.user_management_api.redis.auth import save_refresh_token_to_redis, delete_refresh_token_from_redis
 
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser, \
     ForgetPasswordRequest, ResetPasswordRequest
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.utils.auth import send_tokens_to_user, delete_tokens_from_cookies, \
     get_refresh_token_from_cookie, get_access_token_from_cookie
-from src.user_management_api.core.config import r
+
 
 # Create a module specific logger
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def get_current_user(request: Request) -> CurrentUser:
         roles=payload.roles
     )
     return current_user
+
 
 async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, str]:
     """
@@ -67,36 +69,6 @@ async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, 
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
     logger.info(f"Success: access and refresh tokens are created")
     return access_token, refresh_token
-
-
-async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
-    """
-    Delete refresh token hash and indicate jti of the refresh token is "revoked".
-    """
-    logger.info(f"Start: deleting refresh token from redis for user ID={user_id}, jti={jti}")
-
-    try:
-        await r.delete(f"refresh_token:{user_id}")
-        await r.set(f"revoked_token:{user_id}:{jti}", "true")
-        logger.info(f"Success: refresh token was deleted from redis for user ID={user_id}")
-    except Exception as e:
-        logger.warning(f"Redis error: {e}")
-
-
-async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> None:
-    """
-    Save refresh token hash to redis.
-    """
-    logger.info(f"Start: saving refresh token to redis for user ID={user_id}, jti={jti}")
-
-    try:
-        token_hash = get_token_hash(refresh_token)
-        ttl = timedelta(days=30)
-        await r.setex(f"refresh_token:{user_id}", int(ttl.total_seconds()), token_hash)
-        logger.info(f"Success: refresh token was saved to redis for user ID={user_id}")
-
-    except Exception as e:
-        logger.warning(f"Redis error: {e}")
 
 
 async def verify_refresh_token(request: Request) -> tuple[str, str]:

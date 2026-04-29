@@ -2,9 +2,7 @@
 The module providing handlers for the user information in a profile,
 including  operations.
 """
-import json
 import logging
-from datetime import timedelta
 from operator import and_
 from typing import Any, Sequence
 
@@ -12,15 +10,17 @@ from fastapi import Depends, Request, Response
 from fastapi_pagination import paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.user_management_api.core.config import settings, r
-from src.user_management_api.core.s3_client import delete_presigned_url_from_redis, delete_file, \
-    get_presigned_url_from_redis, save_presigned_url_to_redis, create_presigned_url, create_presigned_post, \
-    generate_image_s3_path
+from src.user_management_api.core.config import settings
+from src.user_management_api.storage_s3.s3_client import  delete_file, create_presigned_url, \
+    create_presigned_post, generate_image_s3_path
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.db.session import get_session
 from src.user_management_api.exceptions.auth import AuthenticationException
 from src.user_management_api.exceptions.user import AuthorizationError, ResourceNotFound, S3StorageError
 from src.user_management_api.models import User
+from src.user_management_api.redis.redis_s3 import delete_presigned_url_from_redis, get_presigned_url_from_redis, \
+    save_presigned_url_to_redis
+from src.user_management_api.redis.user import save_list_users_to_redis, get_list_users_from_redis
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet, \
     PresignedPostResponse, ConfirmAvatarRequest, UserResponse, UserPatchByAdmin, UserFilter, UserPagination, \
@@ -383,43 +383,6 @@ async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
         user_serialized = serialise_user_data(user)
         new_list.append(user_serialized)
     return new_list
-
-
-async def get_list_users_from_redis(role: str) -> list[dict[str, Any]] | None:
-    """
-    Get users from redis.
-    """
-    logger.info("Start: fetch users list from redis")
-    try:
-        list_users = await r.get(f"list_users:{role}")
-
-        if not list_users:
-            logger.info("Redis: users list wasn't found")
-            return None
-
-        data: list[dict[str, Any]] = json.loads(list_users)
-
-        logger.info("Success: users list was fetched from redis")
-
-        return data
-    except Exception as e:
-        logger.warning(f"Redis error: {e}")
-        return None
-
-
-async def save_list_users_to_redis(users: list[dict[str, Any]], role: str ) -> None:
-    """
-    Save users to redis.
-    """
-    logger.info("Start: saving users list to redis")
-
-    try:
-        ttl = timedelta(seconds=3600)
-        await r.setex(f"list_users:{role}", int(ttl.total_seconds()), json.dumps(users))
-        logger.info("Success: users list was saved to redis")
-    except Exception as e:
-        logger.warning(f"Redis error: {e}")
-        pass
 
 
 async def get_users(
