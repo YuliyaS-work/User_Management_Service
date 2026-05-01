@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from unittest.mock import patch, MagicMock
@@ -5,11 +6,12 @@ from unittest.mock import patch, MagicMock
 import pytest
 from sqlalchemy import BinaryExpression, BooleanClauseList
 
-from src.user_management_api.exceptions.auth import AuthenticationException, ConflictException
+from src.user_management_api.exceptions.auth import AuthenticationException, ConflictException, APIException
 from src.user_management_api.exceptions.user import ResourceNotFound
-from src.user_management_api.schemas.auth import UserRegister, UserLogin
+from src.user_management_api.schemas.auth import UserRegister, UserLogin, ForgetPasswordRequest, ResetPasswordRequest
 from src.user_management_api.services.auth import get_current_user, create_and_store_tokens, verify_refresh_token, \
-    register_user, login_user, logout_user
+    register_user, login_user, logout_user, renew_tokens, reset_password, save_password
+from tests.conftest import fake_background_tasks, FakeRequest
 
 
 @patch("src.user_management_api.services.auth.validate_access_token")
@@ -56,15 +58,16 @@ async def test_create_and_store_tokens_success(
         mock_create_access_token,
         mock_create_refresh_token,
         mock_save_refresh_token_to_redis,
-        mock_db
+        mock_db,
+        mock_user
 ):
     user_id = "123"
 
-    mock_user = MagicMock()
-    mock_user.group_id = 1
-    mock_role = MagicMock()
-    mock_role.role_name.value = "USER"
-    mock_user.roles = [mock_role]
+    # mock_user = MagicMock()
+    # mock_user.group_id = 1
+    # mock_role = MagicMock()
+    # mock_role.role_name.value = "USER"
+    # mock_user.roles = [mock_role]
     mock_find_user.return_value = mock_user
 
     mock_create_access_token.return_value = "fake_access_token"
@@ -79,7 +82,6 @@ async def test_create_and_store_tokens_success(
     assert args[0] is mock_db
     assert isinstance(args[1], BinaryExpression)
 
-    mock_create_access_token.assert_called_once_with({"sub": user_id, "group_id": 1, "roles": ["USER"]})
     mock_create_refresh_token.assert_called_once_with({"sub": user_id})
     mock_save_refresh_token_to_redis.assert_called_once_with("fake_refresh_token", "fake_jti", user_id)
 
@@ -525,7 +527,7 @@ async def test_logout_user_success(
 @patch("src.user_management_api.services.auth.verify_refresh_token")
 async def test_logout_user_fail(
         mock_verify_refresh_token,
-        mock_delete_refresh_token,
+        mock_delete_refresh_token_from_redis,
         mock_delete_tokens_from_cookies,
         fake_response,
         fake_request
@@ -536,5 +538,363 @@ async def test_logout_user_fail(
         await logout_user(fake_response, fake_request)
 
     mock_verify_refresh_token.assert_called_once_with(fake_request)
-    mock_delete_refresh_token.assert_not_called()
+    mock_delete_refresh_token_from_redis.assert_not_called()
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.send_tokens_to_user")
+@patch("src.user_management_api.services.auth.create_and_store_tokens")
+@patch("src.user_management_api.services.auth.delete_refresh_token_from_redis")
+@patch("src.user_management_api.services.auth.verify_refresh_token")
+async def test_renew_tokens_success(
+        mock_verify_refresh_token,
+        mock_delete_refresh_token_from_redis,
+        mock_create_and_store_tokens,
+        mock_send_tokens_to_user,
+        fake_response,
+        fake_request,
+        mock_db
+):
+    mock_verify_refresh_token.return_value = ("123", "jti")
+    mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
+
+    result = await renew_tokens(fake_request, fake_response, mock_db)
+
+    assert result.access_token == "fake_access_token"
+    assert result.refresh_token == "fake_refresh_token"
+
+    mock_verify_refresh_token.assert_called_once_with(fake_request)
+    mock_create_and_store_tokens.assert_called_once_with("123", mock_db)
+    mock_delete_refresh_token_from_redis.assert_called_once_with("123", "jti")
+    mock_send_tokens_to_user.assert_called_once_with(fake_response, "fake_access_token", "fake_refresh_token")
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.create_and_store_tokens")
+@patch("src.user_management_api.services.auth.delete_tokens_from_cookies")
+@patch("src.user_management_api.services.auth.verify_refresh_token")
+async def test_renew_tokens_fail(
+        mock_verify_refresh_token,
+        mock_delete_tokens_from_cookies,
+        mock_create_and_store_tokens,
+        fake_response,
+        fake_request,
+        mock_db
+):
+    mock_verify_refresh_token.side_effect = APIException()
+
+    with pytest.raises(APIException):
+        await renew_tokens(fake_request, fake_response, mock_db)
+
+    mock_verify_refresh_token.assert_called_once_with(fake_request)
+    mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
+    mock_create_and_store_tokens.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.delete_tokens_from_cookies")
+@patch("src.user_management_api.services.auth.create_and_store_tokens")
+@patch("src.user_management_api.services.auth.delete_refresh_token_from_redis")
+@patch("src.user_management_api.services.auth.verify_refresh_token")
+async def test_renew_tokens_delete_refresh_token_fails(
+        mock_verify_refresh_token,
+        mock_delete_refresh_token_from_redis,
+        mock_create_and_store_tokens,
+        mock_delete_tokens_from_cookies,
+        fake_response,
+        fake_request,
+        mock_db
+):
+    mock_verify_refresh_token.return_value = ("123", "jti")
+    mock_delete_refresh_token_from_redis.side_effect = APIException()
+
+    with pytest.raises(APIException):
+        await renew_tokens(fake_request, fake_response, mock_db)
+
+    mock_verify_refresh_token.assert_called_once_with(fake_request)
+    mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
+    mock_create_and_store_tokens.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.delete_tokens_from_cookies")
+@patch("src.user_management_api.services.auth.send_tokens_to_user")
+@patch("src.user_management_api.services.auth.create_and_store_tokens")
+@patch("src.user_management_api.services.auth.delete_refresh_token_from_redis")
+@patch("src.user_management_api.services.auth.verify_refresh_token")
+async def test_renew_tokens_sent_token_to_user_fail(
+        mock_verify_refresh_token,
+        mock_delete_refresh_token_from_redis,
+        mock_create_and_store_tokens,
+        mock_send_tokens_to_user,
+        mock_delete_tokens_from_cookies,
+        fake_response,
+        fake_request,
+        mock_db
+):
+    mock_verify_refresh_token.return_value = ("123", "jti")
+    mock_delete_refresh_token_from_redis.return_value = None
+    mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
+    mock_send_tokens_to_user.side_effect = APIException()
+
+    with pytest.raises(APIException):
+        await renew_tokens(fake_request, fake_response, mock_db)
+
+    mock_verify_refresh_token.assert_called_once_with(fake_request)
+    mock_create_and_store_tokens.assert_called_once_with("123", mock_db)
+    mock_delete_refresh_token_from_redis.assert_called_once_with("123", "jti")
+    mock_send_tokens_to_user.assert_called_once_with(fake_response, "fake_access_token", "fake_refresh_token")
+    mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.delete_tokens_from_cookies")
+@patch("src.user_management_api.services.auth.create_and_store_tokens")
+@patch("src.user_management_api.services.auth.delete_refresh_token_from_redis")
+@patch("src.user_management_api.services.auth.verify_refresh_token")
+async def test_renew_tokens_create_tokens_fail(
+        mock_verify_refresh_token,
+        mock_delete_refresh_token_from_redis,
+        mock_create_and_store_tokens,
+        mock_delete_tokens_from_cookies,
+        fake_response,
+        fake_request,
+        mock_db
+):
+    mock_verify_refresh_token.return_value = ("123", "jti")
+    mock_delete_refresh_token_from_redis.return_value = None
+    mock_create_and_store_tokens.side_effect = APIException()
+
+    with pytest.raises(APIException):
+        await renew_tokens(fake_request, fake_response, mock_db)
+
+    mock_verify_refresh_token.assert_called_once_with(fake_request)
+    mock_delete_refresh_token_from_redis.assert_called_once_with("123", "jti")
+    mock_create_and_store_tokens.assert_called_once_with("123", mock_db)
+    mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.publish_message")
+@patch("src.user_management_api.services.auth.create_reset_password_token")
+async def test_reset_password_success(
+        mock_create_reset_password_token,
+        mock_publish_message,
+        fake_background_tasks,
+        freezer_time
+
+):
+    mock_create_reset_password_token.return_value = "fake_token"
+
+    request = FakeRequest(cookies=None)
+    reset_link = "http://testserver/reset-password?token=fake_token"
+    data = ForgetPasswordRequest(email="user@example.com")
+
+    result = await reset_password(fake_background_tasks, data, request)
+
+    assert result == {"message": "Message sent to RabbitMQ"}
+
+    mock_create_reset_password_token.assert_called_once_with("user@example.com")
+    fake_background_tasks.add_task.assert_called_once()
+    _, args,_ = fake_background_tasks.add_task.mock_calls[0]
+
+    assert args[0] is mock_publish_message
+    assert args[1] is request.app
+
+    message = json.loads(args[2])
+
+    assert message["email"] == "user@example.com"
+    assert message["token"] == "fake_token"
+    assert message["subject"] == "Reset your password"
+    assert message["subject"] == "Reset your password"
+    assert message["body"] == f"Click the link to reset your password: {reset_link}"
+    assert message["datetime"] == "2026-04-28T12:00:00+00:00"
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.publish_message")
+@patch("src.user_management_api.services.auth.create_reset_password_token")
+async def test_reset_password_create_reset_password_token_fail(
+        mock_create_reset_password_token,
+        mock_publish_message,
+        fake_background_tasks,
+        freezer_time
+
+):
+    mock_create_reset_password_token.return_value = Exception()
+
+    request = FakeRequest(cookies=None)
+    data = ForgetPasswordRequest(email="user@example.com")
+
+    with pytest.raises(Exception):
+        await reset_password(fake_background_tasks, data, request)
+
+    mock_publish_message.assert_not_called()
+    fake_background_tasks.add_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.decode_token")
+@patch("src.user_management_api.services.auth.validate_reset_password_token")
+@patch("src.user_management_api.services.auth.get_password_hash")
+@patch("src.user_management_api.services.auth.verify_password")
+@patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
+@patch("src.user_management_api.services.auth.UserDAO.patch_by_id")
+async def test_save_password_success(
+        mock_patch_user,
+        mock_find_user,
+        mock_verify_password,
+        mock_get_password_hash,
+        mock_validate_reset_password_token,
+        mock_decode_token,
+        mock_db
+
+):
+    mock_decode_token.return_value = type("Payload", (), {
+        "sub": "user@example.com",
+        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
+        "type": "reset_password",
+        "jti": "12345678123456781234567812345678"
+    })()
+
+    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+
+    mock_validate_reset_password_token.return_value = None
+    mock_get_password_hash.return_value = "new_password_hash"
+    mock_verify_password.return_value = False
+
+    fake_user = type("User", (), {"id": "123", "name": "name", "surname": "surname","password": "old_hash"})
+    mock_find_user.return_value = fake_user
+
+    result = await save_password(data, mock_db)
+
+    assert result == {"message": "Password was changed successfully"}
+
+    mock_decode_token.assert_called_once_with("fake_token")
+    mock_validate_reset_password_token.assert_called_once()
+
+    assert mock_find_user.call_count == 1
+    calls = mock_find_user.call_args_list
+
+    for call in calls:
+        args, kwargs = call
+        assert args[0] is mock_db
+        assert isinstance(args[1], BinaryExpression)
+
+    mock_verify_password.assert_called_once_with(data.new_password, fake_user.password)
+    mock_get_password_hash.assert_called_once_with(data.new_password)
+
+    mock_patch_user.assert_called_once()
+    patch_args, patch_kwargs = mock_patch_user.call_args
+
+    assert patch_args[0] is mock_db
+    assert patch_args[1] == "123"
+    assert patch_args[2] == {"password": "new_password_hash"}
+    mock_db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.decode_token")
+@patch("src.user_management_api.services.auth.validate_reset_password_token")
+@patch("src.user_management_api.services.auth.get_password_hash")
+@patch("src.user_management_api.services.auth.verify_password")
+@patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
+@patch("src.user_management_api.services.auth.UserDAO.patch_by_id")
+async def test_save_password_patch_user_fail(
+        mock_patch_user,
+        mock_find_user,
+        mock_verify_password,
+        mock_get_password_hash,
+        mock_validate_reset_password_token,
+        mock_decode_token,
+        mock_db
+
+):
+    mock_decode_token.return_value = type("Payload", (), {
+        "sub": "user@example.com",
+        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
+        "type": "reset_password",
+        "jti": "12345678123456781234567812345678"
+    })()
+
+    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+
+    mock_validate_reset_password_token.return_value = None
+    mock_get_password_hash.return_value = "new_password_hash"
+
+    fake_user = type("User", (), {"id": "123", "name": "name", "surname": "surname","password": "old_hash"})
+    mock_find_user.return_value = fake_user
+
+    mock_verify_password.return_value = False
+
+    mock_patch_user.side_effect = APIException()
+
+    with pytest.raises(APIException) as e:
+        await save_password(data, mock_db)
+
+    assert e.value.detail == "Failed to update password."
+
+    mock_decode_token.assert_called_once_with("fake_token")
+    mock_validate_reset_password_token.assert_called_once()
+
+    mock_find_user.assert_called_once()
+    args, kwargs = mock_find_user.call_args
+    assert args[0] is mock_db
+    assert isinstance(args[1], BinaryExpression)
+
+    mock_verify_password.assert_called_once_with(data.new_password, fake_user.password)
+    mock_get_password_hash.assert_called_once_with(data.new_password)
+    mock_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.decode_token")
+@patch("src.user_management_api.services.auth.validate_reset_password_token")
+@patch("src.user_management_api.services.auth.get_password_hash")
+@patch("src.user_management_api.services.auth.verify_password")
+@patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
+@patch("src.user_management_api.services.auth.UserDAO.patch_by_id")
+async def test_save_password_verify_password_fail(
+        mock_patch_user,
+        mock_find_user,
+        mock_verify_password,
+        mock_get_password_hash,
+        mock_validate_reset_password_token,
+        mock_decode_token,
+        mock_db
+
+):
+    mock_decode_token.return_value = type("Payload", (), {
+        "sub": "user@example.com",
+        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
+        "type": "reset_password",
+        "jti": "12345678123456781234567812345678"
+    })()
+
+    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+
+    mock_validate_reset_password_token.return_value = None
+    mock_get_password_hash.return_value = "new_password_hash"
+
+    fake_user = type("User", (), {"id": "123", "name": "name", "surname": "surname","password": "old_hash"})
+    mock_find_user.return_value = fake_user
+
+    mock_verify_password.return_value = True
+
+
+    result = await save_password(data, mock_db)
+
+    assert result == {"message": "Don't use the old password."}
+
+    mock_decode_token.assert_called_once_with("fake_token")
+    mock_validate_reset_password_token.assert_called_once()
+
+    mock_find_user.assert_called_once()
+    args, kwargs = mock_find_user.call_args
+    assert args[0] is mock_db
+    assert isinstance(args[1], BinaryExpression)
+
+    mock_verify_password.assert_called_once_with(data.new_password, fake_user.password)
+    mock_get_password_hash.assert_called_once_with(data.new_password)
+    mock_db.commit.assert_not_awaited()

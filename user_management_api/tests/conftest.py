@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 import pytest
@@ -20,9 +21,18 @@ def mock_db():
         yield mock
 
 
-class FakeRequest():
+@pytest.fixture
+def mock_db_user():
+    mock = AsyncMock()
+
+    with patch("src.user_management_api.services.user.AsyncSession", mock):
+        yield mock
+
+class FakeRequest:
     def __init__(self, cookies):
         self.cookies = cookies
+        self.base_url = "http://testserver/"
+        self.app = MagicMock()
 
 @pytest.fixture
 def get_fake_request():
@@ -42,3 +52,36 @@ def fake_response():
 @pytest.fixture
 def fake_request():
     return MagicMock()
+
+
+@pytest.fixture
+def fake_background_tasks():
+    bg = MagicMock()
+    bg.add_task = MagicMock()
+    return bg
+
+@pytest.fixture
+def mock_user():
+    user = MagicMock()
+    user.id = uuid.uuid4()
+    user.name = "name"
+    user.surname = "surname"
+    user.username = "username"
+    user.phone_number = "+375291111111"
+    user.email = "user@example.com"
+    user.image_s3_path = "image.webp"
+    user.is_blocked = False
+    user.created_at = datetime.now()
+    user.modified_at = datetime.now()
+
+    role = MagicMock()
+    role.id = 1
+    role.role_name.value = "USER"
+    user.roles = [role]
+
+    group = MagicMock()
+    group.id = 1
+    group.name = "First"
+    user.group = group
+
+    return user
