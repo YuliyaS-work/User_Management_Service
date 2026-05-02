@@ -33,7 +33,7 @@ from src.user_management_api.utils.auth import delete_tokens_from_cookies
 logger = logging.getLogger(__name__)
 
 
-def serialise_user_data(user: User | None) -> UserResponse:
+def serialize_user_data(user: User | None) -> UserResponse:
     if user is None:
         raise ResourceNotFound("User is not found")
 
@@ -76,7 +76,7 @@ async def get_me(
 
     logger.info("Success: getting serialized user data.")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def delete_me(
@@ -151,7 +151,7 @@ async def patch_me(
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
 
     logger.info("Success: getting patched serialized user data")
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_avatar(
@@ -265,7 +265,7 @@ async def confirm_avatar(
 
     logger.info("Success: user avatar path is saved into the DB")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def delete_avatar(
@@ -300,7 +300,7 @@ async def delete_avatar(
 
     logger.info("Success: user avatar was deleted")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_user(
@@ -334,7 +334,7 @@ async def get_user(
 
     logger.info("Success: getting serialized user data")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def patch_user(
@@ -371,7 +371,7 @@ async def patch_user(
 
     logger.info("Success: getting patched serialized user data for ADMIN")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
@@ -380,7 +380,7 @@ async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
     """
     new_list: list[UserResponse] = []
     for user in list_users:
-        user_serialized = serialise_user_data(user)
+        user_serialized = serialize_user_data(user)
         new_list.append(user_serialized)
     return new_list
 

@@ -110,4 +110,4 @@ async def create_presigned_url(
             "S3 rejected the request",
             extra={"bucket": bucket, "key": image_s3_path}
         )
-        raise S3StorageError("The presignedurl is not created")
+        raise S3StorageError("The presigned url is not created")
