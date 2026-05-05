@@ -416,7 +416,7 @@ async def get_users(
             continue
 
         # Get data from redis.
-        users_list_from_redis = await get_list_users_from_redis(role)
+        users_list_from_redis = await get_list_users_from_redis(role, current_user.user_id)
 
         if users_list_from_redis:
             users_list = [UserResponse(**user) for user in users_list_from_redis]
@@ -432,7 +432,7 @@ async def get_users(
 
             # Cache data to redis.
             users_to_redis = [user.model_dump(mode='json') for user in users_list]
-            await save_list_users_to_redis(users_to_redis, role)
+            await save_list_users_to_redis(users_to_redis, role, current_user.user_id)
 
         # Filter and sort users for response.
         filtered_users = user_filter.filter_users(users_list)

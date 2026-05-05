@@ -20,6 +20,7 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
         logger.info(f"Success: refresh token was deleted from redis for user ID={user_id}")
     except Exception as e:
         logger.warning(f"Redis error: {e}")
+        raise
 
 
 async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> None:
@@ -36,3 +37,4 @@ async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str
 
     except Exception as e:
         logger.warning(f"Redis error: {e}")
+        raise

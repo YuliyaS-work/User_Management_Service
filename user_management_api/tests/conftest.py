@@ -85,3 +85,8 @@ def mock_user():
     user.group = group
 
     return user
+
+@pytest.fixture
+def mock_redis():
+    mock = AsyncMock()
+    return mock

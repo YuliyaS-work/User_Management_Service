@@ -122,5 +122,3 @@ async def test_create_presigned_url_client_error(
     with pytest.raises(S3StorageError) as e:
         await create_presigned_url("bucket", "image_s3_path", "region_mane")
     assert e.value.detail == "The presigned url is not created"
-
-
