@@ -212,7 +212,7 @@ async def test_get_avatar_success_url_none_in_redis(
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.user.get_presigned_url_from_redis")
 @patch("src.user_management_api.services.user.UserDAO.find_one_or_none")
-async def test_get_avatar_success_url_none_in_redis(
+async def test_get_avatar_success_url_none_image_path(
         mock_find_user,
         mock_get_presigned_url_from_redis,
         mock_db_user,
@@ -233,7 +233,7 @@ async def test_get_avatar_success_url_none_in_redis(
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.user.get_presigned_url_from_redis")
 @patch("src.user_management_api.services.user.UserDAO.find_one_or_none")
-async def test_get_avatar_success_url_none_in_redis(
+async def test_get_avatar_success_url_user_not_found(
         mock_find_user,
         mock_get_presigned_url_from_redis,
         mock_db_user,
@@ -365,7 +365,7 @@ async def test_delete_avatar_not_found_user(
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.user.create_presigned_post")
 @patch("src.user_management_api.services.user.generate_image_s3_path")
-async def test_delete_avatar_success(
+async def test_get_presigned_post_success(
         mock_generate_path_image,
         mock_create_post,
         mock_user,
@@ -543,6 +543,7 @@ async def test_patch_user_not_allowed(
 
     assert e.value.detail == "Not allowed"
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "roles, expected_key",
@@ -612,8 +613,8 @@ async def test_get_users_wrong_role(
         email="user@example.com",
         image_s3_path="image.webp",
         is_blocked=False,
-        created_at=datetime.now(),
-        modified_at=datetime.now(),
+        created_at=datetime.now().isoformat(),
+        modified_at=datetime.now().isoformat(),
         group=Group(id=1, name="First"),
         roles=[role]
     )
@@ -631,3 +632,55 @@ async def test_get_users_wrong_role(
         await get_users(mock_db_user, current_user, user_filter, pagination)
 
     assert e.value.detail == "Not allowed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "roles, expected_key",
+    [
+        (["ADMIN"], "ADMIN"),
+        (["MODERATOR"], "MODERATOR"),
+    ]
+)
+@patch("src.user_management_api.services.user.get_list_users_from_redis")
+@patch("src.user_management_api.services.user.save_list_users_to_redis")
+@patch("src.user_management_api.services.user.UserDAO.get_all")
+async def test_get_users_list_in_redis(
+        mock_get_all,
+        mock_save_list_users_to_redis,
+        mock_get_list_users_from_redis,
+        mock_db_user,
+        roles,
+        expected_key
+):
+    list_users = [
+        {
+            "id": str(uuid.uuid4()),
+            "name": "name",
+            "surname": "surname",
+            "username": "username",
+            "phone_number": "+375291111111",
+            "email": "user@example.com",
+            "image_s3_path": "image.webp",
+            "is_blocked": False,
+            "created_at": datetime.now(),
+            "modified_at": datetime.now(),
+            "group": {"id": 1, "group_name": "First"},
+            "roles": [{"id": 1, "role_name": "USER"}]
+        }
+    ]
+    mock_get_list_users_from_redis.return_value = list_users
+
+    mock_get_all.return_value = None
+    current_user = CurrentUser(user_id="123", group_id=1, roles=roles)
+
+    user_filter = MagicMock()
+    user_filter.filter_users.return_value = ["filtered"]
+    user_filter.sort_users.return_value = ["sorted"]
+
+    pagination = Params(page=1, size=30)
+
+    result = await get_users(mock_db_user, current_user, user_filter, pagination)
+
+    assert expected_key in result
+    mock_get_all.assert_not_called()

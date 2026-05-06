@@ -16,9 +16,7 @@ def freezer_time():
 @pytest.fixture
 def mock_db():
     mock = AsyncMock()
-
-    with patch("src.user_management_api.services.auth.AsyncSession", mock):
-        yield mock
+    return mock
 
 
 @pytest.fixture

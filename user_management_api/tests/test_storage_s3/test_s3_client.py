@@ -91,7 +91,7 @@ async def test_create_presigned_post_empty_path():
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.storage_s3.s3_client.s3_session.client")
-async def test_create_presigned_post_success(
+async def test_create_presigned_url_success(
         mock_s3_client
 ):
     mock_s3 = AsyncMock()

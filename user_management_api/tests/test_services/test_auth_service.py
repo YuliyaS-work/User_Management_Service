@@ -125,6 +125,7 @@ async def test_verify_refresh_token_success(
 
     assert user_id == "123"
     assert jti == "12345678123456781234567812345678"
+    assert (user_id, jti) == ("123", "12345678123456781234567812345678")
 
     mock_get_refresh_token_from_cookie.assert_called_once_with(get_fake_request)
     mock_decode_token.assert_called_once_with("fake_token")
@@ -136,7 +137,7 @@ async def test_verify_refresh_token_success(
 @patch("src.user_management_api.services.auth.get_token_hash")
 @patch("src.user_management_api.services.auth.decode_token")
 @patch("src.user_management_api.services.auth.get_refresh_token_from_cookie")
-async def test_verify_refresh_token_success(
+async def test_verify_refresh_token_fail(
         mock_get_refresh_token_from_cookie,
         mock_decode_token,
         mock_get_token_hash,
@@ -229,7 +230,7 @@ async def test_register_user_username_conflict(
         mock_db,
         fake_response
 ):
-    mock_find_user.side_effect = [True]
+    mock_find_user.side_effect = [True, None, None]
 
     user_data = UserRegister(
         name="name",
@@ -242,19 +243,19 @@ async def test_register_user_username_conflict(
 
     with pytest.raises(ConflictException) as e:
         await register_user(fake_response, user_data, mock_db)
-        assert e.value.detail == "Username already exists"
+    assert e.value.detail == "Username already exists"
 
     mock_find_user.assert_called_once()
 
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
-async def test_register_user_username_conflict(
+async def test_register_user_email_conflict(
         mock_find_user,
         mock_db,
         fake_response
 ):
-    mock_find_user.side_effect = [None, True]
+    mock_find_user.side_effect = [None, True, None]
 
     user_data = UserRegister(
         name="name",
@@ -267,7 +268,7 @@ async def test_register_user_username_conflict(
 
     with pytest.raises(ConflictException) as e:
         await register_user(fake_response, user_data, mock_db)
-        assert e.value.detail == "Email already exists"
+    assert e.value.detail == "Email already exists"
 
     assert mock_find_user.call_count == 2
 
@@ -801,7 +802,7 @@ async def test_save_password_success(
 @patch("src.user_management_api.services.auth.verify_password")
 @patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
 @patch("src.user_management_api.services.auth.UserDAO.patch_by_id")
-async def test_save_password_patch_user_fail(
+async def test_save_password_old_password(
         mock_patch_user,
         mock_find_user,
         mock_verify_password,
@@ -898,3 +899,43 @@ async def test_save_password_verify_password_fail(
     mock_verify_password.assert_called_once_with(data.new_password, fake_user.password)
     mock_get_password_hash.assert_called_once_with(data.new_password)
     mock_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.auth.decode_token")
+@patch("src.user_management_api.services.auth.validate_reset_password_token")
+@patch("src.user_management_api.services.auth.get_password_hash")
+@patch("src.user_management_api.services.auth.verify_password")
+@patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
+async def test_save_password_verify_not_user(
+        mock_find_user,
+        mock_verify_password,
+        mock_get_password_hash,
+        mock_validate_reset_password_token,
+        mock_decode_token,
+        mock_db
+
+):
+    mock_decode_token.return_value = type("Payload", (), {
+        "sub": "user@example.com",
+        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
+        "type": "reset_password",
+        "jti": "12345678123456781234567812345678"
+    })()
+
+    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+
+    mock_validate_reset_password_token.return_value = None
+    mock_get_password_hash.return_value = "new_password_hash"
+
+    mock_find_user.return_value = None
+
+    with pytest.raises(ResourceNotFound) as e:
+        await save_password(data, mock_db)
+
+    assert e.value.detail == "User is not found"
+
+    mock_decode_token.assert_called_once_with("fake_token")
+    mock_validate_reset_password_token.assert_called_once()
+
+    mock_find_user.assert_called_once()
