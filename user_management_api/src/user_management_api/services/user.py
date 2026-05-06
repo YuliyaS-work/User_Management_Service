@@ -406,8 +406,8 @@ async def get_users(
 
     response = {}
     roles = {
-        "ADMIN": None,
-        "MODERATOR": User.group_id == current_user.group_id
+        "ADMIN": [None, "ADMIN"],
+        "MODERATOR": [User.group_id == current_user.group_id, current_user.user_id]
     }
 
     for role, condition in roles.items():
@@ -416,14 +416,14 @@ async def get_users(
             continue
 
         # Get data from redis.
-        users_list_from_redis = await get_list_users_from_redis(role, current_user.user_id)
+        users_list_from_redis = await get_list_users_from_redis(role, condition[1])
 
         if users_list_from_redis:
             users_list = [UserResponse(**user) for user in users_list_from_redis]
         else:
             # Get data from database if data from redis is unavailable.
-            if condition is not None:
-                users = await UserDAO.get_all(db, condition)
+            if condition[0] is not None:
+                users = await UserDAO.get_all(db, condition[0])
             else:
                 users = await UserDAO.get_all(db)
 
@@ -432,7 +432,7 @@ async def get_users(
 
             # Cache data to redis.
             users_to_redis = [user.model_dump(mode='json') for user in users_list]
-            await save_list_users_to_redis(users_to_redis, role, current_user.user_id)
+            await save_list_users_to_redis(users_to_redis, role, condition[1])
 
         # Filter and sort users for response.
         filtered_users = user_filter.filter_users(users_list)
