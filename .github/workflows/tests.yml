@@ -4,7 +4,8 @@ on:
   pull_request:
   push:
     branches:
-      - 0705_1_test
+      - dev
+      - main
 
 jobs:
   test:
