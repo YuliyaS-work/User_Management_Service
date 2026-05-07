@@ -24,6 +24,7 @@ jobs:
         run: poetry config virtualenvs.create false
 
       - name: Install dependencies
+        working-directory: user_management_api
         run: poetry install
 
       - name: Run tests
