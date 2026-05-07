@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 0705_1_test
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.create false
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run tests
+        run: poetry run coverage run -m pytest
+
+      - name: Coverage report
+        run: poetry run coverage report --fail-under=80
