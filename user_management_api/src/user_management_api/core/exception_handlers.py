@@ -4,6 +4,7 @@ Global handler for all custom API exceptions.
 Converts APIException instances into consistent JSON error responses
 with the appropriate HTTP status code and messages.
 """
+import logging
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -11,12 +12,30 @@ from fastapi.responses import JSONResponse
 from src.user_management_api.exceptions.auth import APIException
 from src.user_management_api.schemas.auth import APIErrorResponse
 
+# Create a module specific logger
+logger = logging.getLogger(__name__)
 
-async def api_exception_handler(request: Request, exc: APIException):
+
+async def api_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handles all APIException errors and returns a unified JSON response.
     """
+    if isinstance(exc, APIException):
+        logger.warning("APIException: status=%s | %s | path=%s", exc.status_code, exc.detail, request.url.path)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=APIErrorResponse.from_exception(exc).model_dump()
+        )
+
+    logger.exception("Unhandled exception at %s | %s: %s",
+                     request.url.path,
+                     type(exc).__name__,
+                     str(exc),
+                     )
+
     return JSONResponse(
-        status_code=exc.status_code,
-        content=APIErrorResponse.from_exception(exc).model_dump()
-    )
+            status_code=500,
+            content={
+                "status_code": 500,
+                "detail": "Internal server error"}
+        )

@@ -5,17 +5,21 @@ Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
 import hashlib
+import logging
 import uuid
 from typing import Any
 
-from fastapi import HTTPException, status, Response
 from pwdlib import PasswordHash
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
-from src.user_management_api.core.config import settings, r
+from src.user_management_api.core.config import settings
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.schemas.auth import PayLoad
+from src.user_management_api.redis.redis_config import r
+from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken
+
+# Create a module specific logger
+logger = logging.getLogger(__name__)
 
 pwd = PasswordHash.recommended()
 
@@ -44,7 +48,7 @@ def create_access_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "access", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
 def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
@@ -55,28 +59,50 @@ def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     expire = datetime.now(timezone.utc) + timedelta(days=30)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "refresh", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt, jti
 
 
-def decode_token(token: str) -> PayLoad | None:
+def create_reset_password_token(email: str) -> str:
+    """
+    Create a JWT reset password token using a secret_key and an algorithm.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    jti = str(uuid.uuid4())
+    data_to_encode = {"sub": email, "type": "reset_password", "exp": expire, "jti": jti}
+    token: str = jwt.encode(data_to_encode, settings.secret_key, algorithm=settings.algorithm)
+    return token
+
+
+def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | PayLoadResetPasswordToken:
     """
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
     try:
-        payload_decoded = jwt.decode(token, settings.secret_key, settings.algorithm)
-        payload = PayLoad(**payload_decoded)
-        return payload
+        payload_decoded = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        if not payload_decoded:
+            raise AuthenticationException(detail="Token invalid")
+
+        token_type = payload_decoded.get("type")
+        if token_type == "access":
+            return PayLoadAccessToken(**payload_decoded)
+        elif token_type =="refresh":
+            return PayLoadRefreshToken(**payload_decoded)
+        elif token_type == "reset_password":
+            return PayLoadResetPasswordToken(**payload_decoded)
+        else:
+            raise AuthenticationException(detail="Unknown token type")
+
     except JWTError:
-        return None
+        raise AuthenticationException(detail="Token invalid")
 
 
-def validate_access_token(payload: PayLoad | None) -> str:
+def validate_access_token(payload: PayLoadAccessToken) -> bool:
     """
     Validate provided JWT access token.
     """
-    if not payload:
-        raise AuthenticationException(detail="Token invalid")
+    if not isinstance(payload, PayLoadAccessToken):
+        raise AuthenticationException(detail="Invalid token type")
 
     # Check expire time  for access token.
     expire = payload.exp
@@ -89,15 +115,15 @@ def validate_access_token(payload: PayLoad | None) -> str:
     if not user_id:
         raise AuthenticationException(detail="User ID not found")
 
-    return user_id
+    return True
 
 
-async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> tuple[str, str]:
+async def validate_refresh_token( payload: PayLoadRefreshToken, hash_token: str) -> tuple[str, str]:
     """
     Validate provided JWT refresh token.
     """
-    if not payload:
-        raise AuthenticationException(detail="Token invalid")
+    if not isinstance(payload, PayLoadRefreshToken):
+        raise AuthenticationException(detail="Invalid token type")
 
     jti = payload.jti
     expire = payload.exp
@@ -114,11 +140,34 @@ async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> t
         raise AuthenticationException(detail="User ID not found")
 
     # Check refresh token in blacklist.
-    if await r.get(f"revoked_token:{user_id}:{jti}"):
-        raise AuthenticationException(detail="Token has been revoked")
+    try:
+        if await r.get(f"revoked_token:{user_id}:{jti}"):
+            raise AuthenticationException(detail="Token has been revoked")
+    except Exception as e:
+        logger.warning(f"Redis error: {e}")
 
     # Check hash of a provided refresh token with hash in redis.
     if hash_token != saved_hash:
         raise AuthenticationException(detail="Token is not current")
 
     return user_id, jti
+
+
+def validate_reset_password_token(payload: PayLoadResetPasswordToken) -> bool:
+    """
+    Validate provided JWT reset password token.
+    """
+    if not isinstance(payload, PayLoadResetPasswordToken):
+        raise AuthenticationException(detail="Invalid token type")
+
+    # Check expire time  for access token.
+    expire = payload.exp
+    expire_time = datetime.fromtimestamp(int(expire), tz=timezone.utc)
+    if (not expire) or (expire_time < datetime.now(timezone.utc)):
+        raise AuthenticationException(detail="Token is over")
+
+    # Check email to ensure that it's authentic
+    if not payload.sub:
+        raise AuthenticationException(detail="Email not found")
+
+    return True
