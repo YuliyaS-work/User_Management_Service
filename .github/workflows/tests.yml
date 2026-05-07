@@ -10,6 +10,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: sqlite:///test.db
+      SECRET_KEY: test
+      ALGORITHM: HS256
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: test
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: eu-central-1
+      BUCKET_NAME: test
+      RABBITMQ_URL: amqp://localhost
+
     steps:
       - uses: actions/checkout@v4
 
