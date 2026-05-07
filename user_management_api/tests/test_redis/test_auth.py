@@ -8,23 +8,35 @@ from src.user_management_api.redis.auth import delete_refresh_token_from_redis, 
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.redis.auth.r")
-async def test_delete_refresh_token_success(
-        mock_redis
-):
+async def test_delete_refresh_token_success(mock_redis):
+    """
+    delete_refresh_token_from_redis() should delete the active token
+    and mark the jti as revoked.
+    """
+    # Arrange
+    mock_redis.delete = AsyncMock()
+    mock_redis.set = AsyncMock()
+
+    # Act
     await delete_refresh_token_from_redis(user_id="123", jti="jti")
 
+    # Assert
     mock_redis.delete.assert_called_once_with("refresh_token:123")
     mock_redis.set.assert_called_once_with("revoked_token:123:jti", "true")
 
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.redis.auth.r")
-async def test_delete_refresh_token_fail(
-        mock_redis
-):
+async def test_delete_refresh_token_fail(mock_redis):
+    """
+    delete_refresh_token_from_redis() should raise an exception
+    if Redis delete operation fails.
+    """
+    # Arrange
     mock_redis.delete = AsyncMock(side_effect = Exception())
     mock_redis.set = AsyncMock()
 
+    # Act/Assert
     with pytest.raises(Exception):
         await delete_refresh_token_from_redis(user_id="123", jti="jti")
 
@@ -38,11 +50,23 @@ async def test_save_refresh_token_success(
         mock_redis,
         mock_get_token_hash
 ):
+    """
+    save_refresh_token_to_redis() should store the hashed token
+    with correct TTL and key format.
+    """
+    # Arrange
     mock_get_token_hash.return_value = "fake_token_hash"
     ttl = timedelta(days=30)
+
+    # Act
     await save_refresh_token_to_redis(refresh_token="token",user_id="123", jti="jti")
 
-    mock_redis.setex.assert_called_once_with("refresh_token:123", int(ttl.total_seconds()), "fake_token_hash")
+    # Assert
+    mock_redis.setex.assert_called_once_with(
+        "refresh_token:123",
+        int(ttl.total_seconds()),
+        "fake_token_hash"
+    )
 
 
 @pytest.mark.asyncio
@@ -52,9 +76,17 @@ async def test_save_refresh_token_fail(
         mock_redis,
         mock_get_token_hash
 ):
+    """
+    save_refresh_token_to_redis() should raise an exception
+    if Redis setex operation fails.
+    """
+    # Arrange
     mock_redis.setex = AsyncMock(side_effect=Exception())
     mock_get_token_hash.return_value = "fake_token_hash"
+
+    # Act
     with pytest.raises(Exception):
         await save_refresh_token_to_redis(refresh_token="token",user_id="123", jti="jti")
 
+    # Assert
     mock_redis.setex.assert_called_once()

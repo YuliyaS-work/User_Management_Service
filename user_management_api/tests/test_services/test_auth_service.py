@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timezone, timedelta
-from typing import Any
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -8,11 +7,13 @@ from sqlalchemy import BinaryExpression, BooleanClauseList
 
 from src.user_management_api.exceptions.auth import AuthenticationException, ConflictException, APIException
 from src.user_management_api.exceptions.user import ResourceNotFound
-from src.user_management_api.schemas.auth import UserRegister, UserLogin, ForgetPasswordRequest, ResetPasswordRequest
+from src.user_management_api.schemas.auth import UserLogin, ForgetPasswordRequest, ResetPasswordRequest
 from src.user_management_api.services.auth import get_current_user, create_and_store_tokens, verify_refresh_token, \
     register_user, login_user, logout_user, renew_tokens, reset_password, save_password
 from tests.conftest import fake_background_tasks, FakeRequest
 
+
+# Tests for get_current_user()
 
 @patch("src.user_management_api.services.auth.validate_access_token")
 @patch("src.user_management_api.services.auth.decode_token")
@@ -23,6 +24,10 @@ def test_get_current_user_success(
         mock_validate_access_token,
         get_fake_request
 ):
+    """
+    get_current_user() should return user info when access token is valid.
+    """
+    # Arrange
     mock_get_access_token_from_cookie.return_value = "fake_token"
 
     mock_decode_token.return_value = type("Payload", (), {
@@ -35,8 +40,10 @@ def test_get_current_user_success(
     })()
     mock_validate_access_token.return_value = None
 
+    # Act
     user = get_current_user(get_fake_request)
 
+    # Assert
     assert user.user_id == "123"
     assert user.group_id == 1
     assert user.roles == ["USER"]
@@ -46,7 +53,7 @@ def test_get_current_user_success(
     mock_validate_access_token.assert_called_once_with(mock_decode_token.return_value)
 
 
-
+# Tests for create_and_store_tokens()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.save_refresh_token_to_redis")
@@ -61,20 +68,20 @@ async def test_create_and_store_tokens_success(
         mock_db,
         mock_user
 ):
+    """
+    create_and_store_tokens() should generate tokens and store refresh token in Redis.
+    """
+    # Arrange
     user_id = "123"
-
-    # mock_user = MagicMock()
-    # mock_user.group_id = 1
-    # mock_role = MagicMock()
-    # mock_role.role_name.value = "USER"
-    # mock_user.roles = [mock_role]
     mock_find_user.return_value = mock_user
-
     mock_create_access_token.return_value = "fake_access_token"
     mock_create_refresh_token.return_value = ("fake_refresh_token", "fake_jti")
     mock_save_refresh_token_to_redis.return_value = None
 
+    # Act
     access_token, refresh_token = await create_and_store_tokens(user_id, mock_db)
+
+    # Assert
     assert access_token == "fake_access_token"
     assert refresh_token == "fake_refresh_token"
 
@@ -92,12 +99,22 @@ async def test_create_and_store_tokens_user_not_found(
         mock_find_user,
         mock_db
 ):
+    """
+    create_and_store_tokens() should raise ResourceNotFound when user does not exist.
+    """
+    # Arrange
     mock_find_user.return_value = None
+
+    # Act
     with pytest.raises(ResourceNotFound) as e:
         await create_and_store_tokens("123", mock_db)
-        assert e.value.detail == "User is not found"
+
+    # Assert
+    assert e.value.detail == "User is not found"
     mock_find_user.assert_called_once()
 
+
+# Tests for verify_refresh_token()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.validate_refresh_token")
@@ -111,6 +128,10 @@ async def test_verify_refresh_token_success(
         mock_validate_refresh_token,
         get_fake_request
 ):
+    """
+    verify_refresh_token() should return user_id and jti when refresh token is valid.
+    """
+    # Arrange
     mock_get_refresh_token_from_cookie.return_value = "fake_token"
     mock_decode_token.return_value = type("Payload", (), {
         "sub": "123",
@@ -121,8 +142,10 @@ async def test_verify_refresh_token_success(
     mock_get_token_hash.return_value = "fake_hash_token"
     mock_validate_refresh_token.return_value = ("123", "12345678123456781234567812345678")
 
+    # Act
     user_id, jti = await verify_refresh_token(get_fake_request)
 
+    # Assert
     assert user_id == "123"
     assert jti == "12345678123456781234567812345678"
     assert (user_id, jti) == ("123", "12345678123456781234567812345678")
@@ -144,16 +167,24 @@ async def test_verify_refresh_token_fail(
         mock_validate_refresh_token,
         get_fake_request
 ):
+    """
+    verify_refresh_token() should raise AuthenticationException for invalid refresh token.
+    """
+    # Arrange
     mock_get_refresh_token_from_cookie.return_value = "fake_token"
     mock_decode_token.return_value = {"sub": "123"}
     mock_get_token_hash.return_value = "fake_hash_token"
     mock_validate_refresh_token.side_effect = AuthenticationException
 
+    # Act
     with pytest.raises(AuthenticationException) as e:
         await verify_refresh_token(get_fake_request)
-        assert e.value.detail == "Invalid token type"
+
+    # Assert
     mock_validate_refresh_token.assert_called_once()
 
+
+# Tests for register_user()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.send_tokens_to_user")
@@ -168,31 +199,25 @@ async def test_register_user_success(
         mock_create_and_store_tokens,
         mock_send_token_to_user,
         mock_db,
-        fake_response
+        fake_response,
+        user_register_data
 ):
+    """
+    register_user() should create a new user and return access/refresh tokens.
+    """
+    # Arrange
     mock_find_user.return_value = None
     mock_get_password_hash.return_value = "fake_password_hash"
-
     mock_user = MagicMock()
     mock_user.id = "123"
     mock_add_user.return_value = mock_user
-
     mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
-
-    user_data = UserRegister(
-        name="name",
-        surname="surname",
-        username="username",
-        password="Password1!",
-        phone_number="+375291111111",
-        email="user@example.com"
-    )
-
-
     mock_send_token_to_user.return_value = None
 
-    result = await register_user(fake_response, user_data, mock_db)
+    # Act
+    result = await register_user(fake_response, user_register_data, mock_db)
 
+    # Assert
     assert mock_find_user.call_count == 3
     calls = mock_find_user.call_args_list
 
@@ -201,23 +226,27 @@ async def test_register_user_success(
         assert args[0] is mock_db
         assert isinstance(args[1], BinaryExpression)
 
-
-    mock_get_password_hash.assert_called_once_with(user_data.password)
+    mock_get_password_hash.assert_called_once_with(user_register_data.password)
     mock_add_user.assert_called_once()
     add_args, add_kwargs = mock_add_user.call_args
 
     assert add_args[0] is mock_db
-    assert add_kwargs["name"] == user_data.name
-    assert add_kwargs["surname"] == user_data.surname
-    assert add_kwargs["username"] == user_data.username
-    assert add_kwargs["email"] == user_data.email
+    assert add_kwargs["name"] == user_register_data.name
+    assert add_kwargs["surname"] == user_register_data.surname
+    assert add_kwargs["username"] == user_register_data.username
+    assert add_kwargs["email"] == user_register_data.email
     assert add_kwargs["password"] == "fake_password_hash"
-    assert add_kwargs["phone_number"] == user_data.phone_number
+    assert add_kwargs["phone_number"] == user_register_data.phone_number
 
-    mock_create_and_store_tokens.assert_called_once_with("123",
-                                                         mock_db)
-    mock_send_token_to_user.assert_called_once_with(fake_response,"fake_access_token", "fake_refresh_token")
-
+    mock_create_and_store_tokens.assert_called_once_with(
+        "123",
+        mock_db
+    )
+    mock_send_token_to_user.assert_called_once_with(
+        fake_response,
+        "fake_access_token",
+        "fake_refresh_token"
+    )
     assert result.access_token == "fake_access_token"
     assert result.refresh_token == "fake_refresh_token"
 
@@ -228,23 +257,21 @@ async def test_register_user_success(
 async def test_register_user_username_conflict(
         mock_find_user,
         mock_db,
-        fake_response
+        fake_response,
+        user_register_data
 ):
+    """
+    register_user() should raise ConflictException when username already exists.
+    """
+    # Arrange
     mock_find_user.side_effect = [True, None, None]
 
-    user_data = UserRegister(
-        name="name",
-        surname="surname",
-        username="username",
-        password="Password1!",
-        phone_number="+375291111111",
-        email="user@example.com"
-    )
-
+    # Act
     with pytest.raises(ConflictException) as e:
-        await register_user(fake_response, user_data, mock_db)
-    assert e.value.detail == "Username already exists"
+        await register_user(fake_response, user_register_data, mock_db)
 
+    # Assert
+    assert e.value.detail == "Username already exists"
     mock_find_user.assert_called_once()
 
 
@@ -253,23 +280,21 @@ async def test_register_user_username_conflict(
 async def test_register_user_email_conflict(
         mock_find_user,
         mock_db,
-        fake_response
+        fake_response,
+        user_register_data
 ):
+    """
+    register_user() should raise ConflictException when email already exists.
+    """
+    # Arrange
     mock_find_user.side_effect = [None, True, None]
 
-    user_data = UserRegister(
-        name="name",
-        surname="surname",
-        username="username",
-        password="Password1!",
-        phone_number="+375291111111",
-        email="user@example.com"
-    )
-
+    # Act
     with pytest.raises(ConflictException) as e:
-        await register_user(fake_response, user_data, mock_db)
-    assert e.value.detail == "Email already exists"
+        await register_user(fake_response, user_register_data, mock_db)
 
+    # Assert
+    assert e.value.detail == "Email already exists"
     assert mock_find_user.call_count == 2
 
 
@@ -278,25 +303,25 @@ async def test_register_user_email_conflict(
 async def test_register_user_username_conflict(
         mock_find_user,
         mock_db,
-        fake_response
+        fake_response,
+        user_register_data
 ):
+    """
+    register_user() should raise ConflictException when phone number already exists.
+    """
+    # Arrange
     mock_find_user.side_effect = [None, None, True]
 
-    user_data = UserRegister(
-        name="name",
-        surname="surname",
-        username="username",
-        password="Password1!",
-        phone_number="+375291111111",
-        email="user@example.com"
-    )
-
+    # Act
     with pytest.raises(ConflictException) as e:
-        await register_user(fake_response, user_data, mock_db)
-        assert e.value.detail == "Phone number already exists"
+        await register_user(fake_response, user_register_data, mock_db)
 
+    # Assert
+    assert e.value.detail == "Phone number already exists"
     assert mock_find_user.call_count == 3
 
+
+# Tests for login_user()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.send_tokens_to_user")
@@ -312,19 +337,23 @@ async def test_login_user_success_username(
         fake_response,
         fake_request
 ):
+    """
+    login_user() should authenticate user by username and return tokens.
+    """
+    # Arrange
     mock_user = MagicMock()
     mock_user.id = "123"
     mock_user.username = "username"
     mock_user.password = "fake_password_hash"
     mock_find_user.return_value = mock_user
-
     mock_verify_password.return_value = True
     mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
-
     user_data = UserLogin(login="username", password="Password1!")
 
+    # Act
     result = await login_user(fake_request, fake_response, user_data, mock_db)
 
+    # Assert
     assert result.access_token == "fake_access_token"
     assert result.refresh_token == "fake_refresh_token"
 
@@ -357,12 +386,14 @@ async def test_login_user_success_phonenumber(
         fake_response,
         fake_request
 ):
-
+    """
+    login_user() should authenticate user by phone number and return tokens.
+    """
+    # Arrange
     mock_phone_obj = MagicMock()
     mock_phone_obj.italian_leading_zero = False
     mock_phone_obj.numbers_of_leading_zeros = 0
     mock_parse.return_value = mock_phone_obj
-
     mock_is_valid.return_value = True
 
     mock_user = MagicMock()
@@ -375,8 +406,10 @@ async def test_login_user_success_phonenumber(
 
     user_data = UserLogin(login="+375291111111", password="Password1!")
 
+    # Act
     result = await login_user(fake_request, fake_response, user_data, mock_db)
 
+    # Assert
     assert result.access_token == "fake_access_token"
     assert result.refresh_token == "fake_refresh_token"
 
@@ -397,7 +430,10 @@ async def test_login_user_success_email(
         fake_response,
         fake_request
 ):
-
+    """
+    login_user() should authenticate user by email and return tokens.
+    """
+    # Arrange
     mock_user = MagicMock()
     mock_user.id = "123"
     mock_user.password = "fake_password_hash"
@@ -408,8 +444,10 @@ async def test_login_user_success_email(
 
     user_data = UserLogin(login="user@example.com", password="Password1!")
 
+    # Act
     result = await login_user(fake_request, fake_response, user_data, mock_db)
 
+    # Assert
     assert result.access_token == "fake_access_token"
     assert result.refresh_token == "fake_refresh_token"
 
@@ -425,14 +463,19 @@ async def test_login_user_not_found(
         fake_response,
         fake_request
 ):
+    """
+    login_user() should raise AuthenticationException when user is not found.
+    """
     mock_find_user.return_value = None
 
     user_data = UserLogin(login="unknown", password="Password1!")
 
-
+    # Act
     with pytest.raises(AuthenticationException) as e:
         await login_user(fake_request, fake_response, user_data, mock_db)
-        assert e.value.detail == "User's not found."
+
+    # Assert
+    assert e.value.detail == "User's not found."
 
     mock_find_user.assert_called_once()
 
@@ -447,6 +490,10 @@ async def test_login_user_wrong_password(
         fake_response,
         fake_request
 ):
+    """
+    login_user() should raise AuthenticationException when password is incorrect.
+    """
+    # Arrange
     mock_user = MagicMock()
     mock_user.username = "username"
     mock_user.password = "fake_password_hash"
@@ -456,9 +503,11 @@ async def test_login_user_wrong_password(
 
     user_data = UserLogin(login="username", password="wrong_password")
 
+    # Act
     with pytest.raises(AuthenticationException):
         await login_user(fake_request, fake_response, user_data, mock_db)
 
+    # Assert
     mock_verify_password.assert_called_once_with("wrong_password", "fake_password_hash")
 
 
@@ -470,13 +519,19 @@ async def test_login_user_wrong_phonenumber(
         fake_response,
         fake_request
 ):
+    """
+    login_user() should raise AuthenticationException when phone number is invalid.
+    """
+    # Arrange
     mock_find_user.return_value = None
-
     user_data = UserLogin(login="wrong_phonenumber", password="Password1!")
 
+    # Act
     with pytest.raises(AuthenticationException) as e:
         await login_user(fake_request, fake_response, user_data, mock_db)
-        assert e.value.detail == "User's not found."
+
+    # Assert
+    assert e.value.detail == "User's not found."
 
     mock_find_user.assert_called_once()
 
@@ -489,16 +544,24 @@ async def test_login_user_wrong_email(
         fake_response,
         fake_request
 ):
+    """
+    login_user() should raise AuthenticationException when email is invalid.
+    """
+    # Arrange
     mock_find_user.return_value = None
-
     user_data = UserLogin(login="wrong_email", password="Password1!")
 
+    # Act
     with pytest.raises(AuthenticationException) as e:
         await login_user(fake_request, fake_response, user_data, mock_db)
-        assert e.value.detail == "User's not found."
+
+    # Assert
+    assert e.value.detail == "User's not found."
 
     mock_find_user.assert_called_once()
 
+
+# Tests for logout_user()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.delete_tokens_from_cookies")
@@ -511,10 +574,16 @@ async def test_logout_user_success(
         fake_response,
         fake_request
 ):
+    """
+    logout_user() should delete refresh token and cookies successfully.
+    """
+    # Arrange
     mock_verify_refresh_token.return_value = ("123", "fake_jti")
 
+    # Act
     result = await logout_user(fake_response, fake_request)
 
+    # Assert
     assert result == {"message": "User logged out"}
 
     mock_verify_refresh_token.assert_called_once_with(fake_request)
@@ -533,15 +602,23 @@ async def test_logout_user_fail(
         fake_response,
         fake_request
 ):
+    """
+    logout_user() should raise AuthenticationException when refresh token is invalid.
+    """
+    # Arrange
     mock_verify_refresh_token.side_effect = AuthenticationException
 
+    # Act
     with pytest.raises(AuthenticationException):
         await logout_user(fake_response, fake_request)
 
+    # Assert
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_delete_refresh_token_from_redis.assert_not_called()
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
 
+
+#  Tests for renew_tokens()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.send_tokens_to_user")
@@ -557,11 +634,17 @@ async def test_renew_tokens_success(
         fake_request,
         mock_db
 ):
+    """
+    renew_tokens() should issue new tokens and revoke old refresh token.
+    """
+    # Arrange
     mock_verify_refresh_token.return_value = ("123", "jti")
     mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
 
+    # Act
     result = await renew_tokens(fake_request, fake_response, mock_db)
 
+    # Assert
     assert result.access_token == "fake_access_token"
     assert result.refresh_token == "fake_refresh_token"
 
@@ -583,11 +666,17 @@ async def test_renew_tokens_fail(
         fake_request,
         mock_db
 ):
+    """
+    renew_tokens() should raise APIException when refresh token validation fails.
+    """
+    # Arrange
     mock_verify_refresh_token.side_effect = APIException()
 
+    # Act
     with pytest.raises(APIException):
         await renew_tokens(fake_request, fake_response, mock_db)
 
+    # Assert
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
     mock_create_and_store_tokens.assert_not_called()
@@ -607,12 +696,18 @@ async def test_renew_tokens_delete_refresh_token_fails(
         fake_request,
         mock_db
 ):
+    """
+    renew_tokens() should raise APIException when old refresh token cannot be deleted.
+    """
+    # Arrange
     mock_verify_refresh_token.return_value = ("123", "jti")
     mock_delete_refresh_token_from_redis.side_effect = APIException()
 
+    # Act
     with pytest.raises(APIException):
         await renew_tokens(fake_request, fake_response, mock_db)
 
+    # Assert
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
     mock_create_and_store_tokens.assert_not_called()
@@ -634,14 +729,20 @@ async def test_renew_tokens_sent_token_to_user_fail(
         fake_request,
         mock_db
 ):
+    """
+    renew_tokens() should raise APIException when sending tokens to user fails.
+    """
+    # Arrange
     mock_verify_refresh_token.return_value = ("123", "jti")
     mock_delete_refresh_token_from_redis.return_value = None
     mock_create_and_store_tokens.return_value = ("fake_access_token", "fake_refresh_token")
     mock_send_tokens_to_user.side_effect = APIException()
 
+    # Act
     with pytest.raises(APIException):
         await renew_tokens(fake_request, fake_response, mock_db)
 
+    # Assert
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_create_and_store_tokens.assert_called_once_with("123", mock_db)
     mock_delete_refresh_token_from_redis.assert_called_once_with("123", "jti")
@@ -663,18 +764,26 @@ async def test_renew_tokens_create_tokens_fail(
         fake_request,
         mock_db
 ):
+    """
+    renew_tokens() should raise APIException when new tokens cannot be created.
+    """
+    # Arrange
     mock_verify_refresh_token.return_value = ("123", "jti")
     mock_delete_refresh_token_from_redis.return_value = None
     mock_create_and_store_tokens.side_effect = APIException()
 
+    # Act
     with pytest.raises(APIException):
         await renew_tokens(fake_request, fake_response, mock_db)
 
+    # Assert
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_delete_refresh_token_from_redis.assert_called_once_with("123", "jti")
     mock_create_and_store_tokens.assert_called_once_with("123", mock_db)
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
 
+
+# Tests for reset_password()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.publish_message")
@@ -684,16 +793,20 @@ async def test_reset_password_success(
         mock_publish_message,
         fake_background_tasks,
         freezer_time
-
 ):
+    """
+    reset_password() should generate reset token and publish message to RabbitMQ.
+    """
+    # Arrange
     mock_create_reset_password_token.return_value = "fake_token"
-
     request = FakeRequest(cookies=None)
     reset_link = "http://testserver/reset-password?token=fake_token"
     data = ForgetPasswordRequest(email="user@example.com")
 
+    # Act
     result = await reset_password(fake_background_tasks, data, request)
 
+    # Assert
     assert result == {"message": "Message sent to RabbitMQ"}
 
     mock_create_reset_password_token.assert_called_once_with("user@example.com")
@@ -721,19 +834,25 @@ async def test_reset_password_create_reset_password_token_fail(
         mock_publish_message,
         fake_background_tasks,
         freezer_time
-
 ):
+    """
+    reset_password() should raise Exception when token generation fails.
+    """
+    # Arrange
     mock_create_reset_password_token.return_value = Exception()
-
     request = FakeRequest(cookies=None)
     data = ForgetPasswordRequest(email="user@example.com")
 
+    # Act
     with pytest.raises(Exception):
         await reset_password(fake_background_tasks, data, request)
 
+    # Assert
     mock_publish_message.assert_not_called()
     fake_background_tasks.add_task.assert_not_called()
 
+
+# Tests for save_password()
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.decode_token")
@@ -749,17 +868,17 @@ async def test_save_password_success(
         mock_get_password_hash,
         mock_validate_reset_password_token,
         mock_decode_token,
-        mock_db
+        mock_db,
+        reset_password_payload,
+        reset_password_request
 
 ):
-    mock_decode_token.return_value = type("Payload", (), {
-        "sub": "user@example.com",
-        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
-        "type": "reset_password",
-        "jti": "12345678123456781234567812345678"
-    })()
-
-    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+    """
+    save_password() should update user password when reset token is valid.
+    """
+    # Arrange
+    mock_decode_token.return_value = reset_password_payload
+    data = reset_password_request
 
     mock_validate_reset_password_token.return_value = None
     mock_get_password_hash.return_value = "new_password_hash"
@@ -768,8 +887,10 @@ async def test_save_password_success(
     fake_user = type("User", (), {"id": "123", "name": "name", "surname": "surname","password": "old_hash"})
     mock_find_user.return_value = fake_user
 
+    # Act
     result = await save_password(data, mock_db)
 
+    # Assert
     assert result == {"message": "Password was changed successfully"}
 
     mock_decode_token.assert_called_once_with("fake_token")
@@ -809,31 +930,31 @@ async def test_save_password_old_password(
         mock_get_password_hash,
         mock_validate_reset_password_token,
         mock_decode_token,
-        mock_db
+        mock_db,
+        reset_password_payload,
+        reset_password_request
 
 ):
-    mock_decode_token.return_value = type("Payload", (), {
-        "sub": "user@example.com",
-        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
-        "type": "reset_password",
-        "jti": "12345678123456781234567812345678"
-    })()
-
-    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+    """
+    save_password() should raise APIException when updating password fails.
+    """
+    mock_decode_token.return_value = reset_password_payload
+    data = reset_password_request
 
     mock_validate_reset_password_token.return_value = None
     mock_get_password_hash.return_value = "new_password_hash"
 
     fake_user = type("User", (), {"id": "123", "name": "name", "surname": "surname","password": "old_hash"})
     mock_find_user.return_value = fake_user
-
     mock_verify_password.return_value = False
 
     mock_patch_user.side_effect = APIException()
 
+    # Act
     with pytest.raises(APIException) as e:
         await save_password(data, mock_db)
 
+    # Assert
     assert e.value.detail == "Failed to update password."
 
     mock_decode_token.assert_called_once_with("fake_token")
@@ -863,17 +984,16 @@ async def test_save_password_verify_password_fail(
         mock_get_password_hash,
         mock_validate_reset_password_token,
         mock_decode_token,
-        mock_db
-
+        mock_db,
+        reset_password_payload,
+        reset_password_request
 ):
-    mock_decode_token.return_value = type("Payload", (), {
-        "sub": "user@example.com",
-        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
-        "type": "reset_password",
-        "jti": "12345678123456781234567812345678"
-    })()
-
-    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+    """
+    save_password() should return a warning message when the new password matches the old one.
+    """
+    # Arrange
+    mock_decode_token.return_value = reset_password_payload
+    data = reset_password_request
 
     mock_validate_reset_password_token.return_value = None
     mock_get_password_hash.return_value = "new_password_hash"
@@ -883,9 +1003,10 @@ async def test_save_password_verify_password_fail(
 
     mock_verify_password.return_value = True
 
-
+    # Act
     result = await save_password(data, mock_db)
 
+    # Assert
     assert result == {"message": "Don't use the old password."}
 
     mock_decode_token.assert_called_once_with("fake_token")
@@ -913,26 +1034,27 @@ async def test_save_password_verify_not_user(
         mock_get_password_hash,
         mock_validate_reset_password_token,
         mock_decode_token,
-        mock_db
-
+        mock_db,
+        reset_password_payload,
+        reset_password_request
 ):
-    mock_decode_token.return_value = type("Payload", (), {
-        "sub": "user@example.com",
-        "exp": int((datetime(2026, 4, 28, 12, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=10)).timestamp()),
-        "type": "reset_password",
-        "jti": "12345678123456781234567812345678"
-    })()
-
-    data = ResetPasswordRequest(token="fake_token", new_password="reset_password")
+    """
+    save_password() should raise ResourceNotFound when the user does not exist in the database.
+    """
+    # Arrange
+    mock_decode_token.return_value = reset_password_payload
+    data = reset_password_request
 
     mock_validate_reset_password_token.return_value = None
     mock_get_password_hash.return_value = "new_password_hash"
 
     mock_find_user.return_value = None
 
+    # Act
     with pytest.raises(ResourceNotFound) as e:
         await save_password(data, mock_db)
 
+    # Assert
     assert e.value.detail == "User is not found"
 
     mock_decode_token.assert_called_once_with("fake_token")

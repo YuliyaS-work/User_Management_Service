@@ -16,25 +16,41 @@ def test_validate_phone_number_signup_success(
         mock_is_valid_number,
         mock_format_number
 ):
-
+    """
+    validate_phone_number_signup() should return formatted E164 phone number
+    when parsing and validation succeed.
+    """
+    #Arrange
     mock_parsed = MagicMock()
     mock_parse.return_value = mock_parsed
     mock_is_valid_number.return_value = True
     mock_format_number.return_value = "+375291234567"
 
+    # Act
     result = validate_phone_number_signup("+375 29 1234567")
 
+    # Assert
     assert result == "+375291234567"
-
     mock_parse.assert_called_once_with("+375 29 1234567", None)
     mock_is_valid_number.assert_called_once()
     mock_format_number.assert_called_once_with(mock_parsed, phonenumbers.PhoneNumberFormat.E164)
 
+
 def test_validate_phone_number_signup_phonenumber_None():
+    """
+    validate_phone_number_signup() should return None when value is None.
+    """
+    # Act/Assert
     assert validate_phone_number_signup(None) == None
 
+
 def test_validate_phone_number_signup_empty_phonenumber():
+    """
+    validate_phone_number_signup() should return None when value is an empty string.
+    """
+    # Act/Assert
     assert validate_phone_number_signup("") == None
+
 
 @patch("src.user_management_api.validators.auth.phonenumbers.format_number")
 @patch("src.user_management_api.validators.auth.phonenumbers.is_valid_number")
@@ -44,19 +60,26 @@ def test_validate_phone_number_signup_not_valid(
         mock_is_valid_number,
         mock_format_number
 ):
-
+    """
+    validate_phone_number_signup() should raise ValueError
+    when phone number is parsed but not valid.
+    """
+    # Arrange
     mock_parsed = MagicMock()
     mock_parse.return_value = mock_parsed
     mock_is_valid_number.return_value = False
 
+    # Act
     with pytest.raises(ValueError) as e:
         validate_phone_number_signup("+375 29 1234567")
 
+    # Assert
     assert str(e.value) == "Invalid phone number"
 
     mock_parse.assert_called_once_with("+375 29 1234567", None)
     mock_is_valid_number.assert_called_once_with(mock_parsed)
     mock_format_number.assert_not_called()
+
 
 @patch("src.user_management_api.validators.auth.phonenumbers.format_number")
 @patch("src.user_management_api.validators.auth.phonenumbers.is_valid_number")
@@ -66,16 +89,22 @@ def test_validate_phone_number_signup_wrong_format(
         mock_is_valid_number,
         mock_format_number
 ):
-
+    """
+    validate_phone_number_signup() should raise ValueError
+    when formatting the phone number fails.
+    """
+    # Arrange
     mock_parsed = MagicMock()
     mock_parse.return_value = mock_parsed
     mock_is_valid_number.return_value = True
     mock_format_number.side_effect = NumberParseException(NumberParseException.INVALID_COUNTRY_CODE,
     "Invalid phone number format")
 
+    # Act
     with pytest.raises(ValueError) as e:
         validate_phone_number_signup("+375 29 1234567")
 
+    # Assert
     assert str(e.value) == "Invalid phone number format"
 
     mock_parse.assert_called_once_with("+375 29 1234567", None)
@@ -83,42 +112,77 @@ def test_validate_phone_number_signup_wrong_format(
 
 
 def test_validate_password_success():
+    """
+    validate_password() should return the password unchanged when valid.
+    """
+    # Act
     result = validate_password("Password1!")
+
+    # Assert
     assert isinstance(result, str)
     assert len(result) > 0
 
+
 def test_validate_password_wrong_length():
+    """
+    validate_password() should raise an error when password is too short.
+    """
+    # Act
     with pytest.raises(PydanticCustomError) as e:
         validate_password("Word1!")
 
+    # Assert
     assert e.value.type == "password_too_short"
     assert e.value.message_template == "Password must contain 8 characters and more."
 
+
 def test_validate_password_no_uppercase():
+    """
+    validate_password() should raise an error when password lacks uppercase letters.
+    """
+    # Act
     with pytest.raises(PydanticCustomError) as e:
         validate_password("password1!")
 
+    # Assert
     assert e.value.type == "password_no_uppercase"
     assert e.value.message_template == "Password must contain at least one uppercase letter."
 
 
 def test_validate_password_no_lowercase():
+    """
+     validate_password() should raise an error when password lacks lowercase letters.
+    """
+    # Act
     with pytest.raises(PydanticCustomError) as e:
         validate_password("PASSWORD1!")
 
+    # Assert
     assert e.value.type == "password_no_lowercase"
     assert e.value.message_template == "Password must contain at least one lowercase letter."
 
+
 def test_validate_password_no_digit():
+    """
+    validate_password() should raise an error when password lacks digits.
+    """
+    # Act
     with pytest.raises(PydanticCustomError) as e:
         validate_password("Password!")
 
+    # Assert
     assert e.value.type == "password_no_digit"
     assert e.value.message_template == "Password must contain at least one digit."
 
+
 def test_validate_password_no_special_symbol():
+    """
+    validate_password() should raise an error when password lacks special characters.
+    """
+    # Act
     with pytest.raises(PydanticCustomError) as e:
         validate_password("Password1")
 
+    # Assert
     assert e.value.type == "password_no_special_character"
     assert e.value.message_template == "Password must contain at least one special character."
