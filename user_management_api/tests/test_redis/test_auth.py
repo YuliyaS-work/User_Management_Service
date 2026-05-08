@@ -15,14 +15,19 @@ async def test_delete_refresh_token_success(mock_redis):
     """
     # Arrange
     mock_redis.delete = AsyncMock()
-    mock_redis.set = AsyncMock()
+    mock_redis.setex = AsyncMock()
+    expected_ttl = int(timedelta(days=30).total_seconds())
 
     # Act
     await delete_refresh_token_from_redis(user_id="123", jti="jti")
 
     # Assert
     mock_redis.delete.assert_called_once_with("refresh_token:123")
-    mock_redis.set.assert_called_once_with("revoked_token:123:jti", "true")
+    mock_redis.setex.assert_called_once_with(
+        "revoked_token:123:jti",
+        expected_ttl,
+        "true"
+    )
 
 
 @pytest.mark.asyncio
@@ -34,13 +39,14 @@ async def test_delete_refresh_token_fail(mock_redis):
     """
     # Arrange
     mock_redis.delete = AsyncMock(side_effect = Exception())
-    mock_redis.set = AsyncMock()
+    mock_redis.setex = AsyncMock()
 
     # Act/Assert
     with pytest.raises(Exception):
         await delete_refresh_token_from_redis(user_id="123", jti="jti")
 
     mock_redis.delete.assert_called_once()
+    mock_redis.setex.assert_not_called()
 
 
 @pytest.mark.asyncio

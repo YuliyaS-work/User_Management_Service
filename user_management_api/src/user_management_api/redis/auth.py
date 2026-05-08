@@ -16,7 +16,8 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
 
     try:
         await r.delete(f"refresh_token:{user_id}")
-        await r.set(f"revoked_token:{user_id}:{jti}", "true")
+        ttl = timedelta(days=30)
+        await r.setex(f"revoked_token:{user_id}:{jti}", int(ttl.total_seconds()), "true")
         logger.info(f"Success: refresh token was deleted from redis for user ID={user_id}")
     except Exception as e:
         logger.warning(f"Redis error: {e}")
