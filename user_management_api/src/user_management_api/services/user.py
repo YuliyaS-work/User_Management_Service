@@ -390,7 +390,7 @@ async def get_users(
             conditions.append(User.name.ilike(f"%{user_filter.name}%"))
 
         if user_filter.surname:
-            conditions.append(User.name.ilike(f"%{user_filter.surname}%"))
+            conditions.append(User.surname.ilike(f"%{user_filter.surname}%"))
 
         # Get data from database.
         users = await UserDAO.get_all(db, *conditions)
