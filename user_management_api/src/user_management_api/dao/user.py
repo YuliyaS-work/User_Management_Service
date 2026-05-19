@@ -55,14 +55,16 @@ class UserDAO(BaseDAO[User]):
 
 
     @classmethod
-    async def get_all(cls, db: AsyncSession, where=None):
+    async def get_all(cls, db: AsyncSession, *conditions):
         query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group))
 
-        if where is not None:
-            query = query.where(where)
+        for condition in conditions:
+            if condition is not None:
+                query = query.where(condition)
 
         result = await db.execute(query)
         return result.scalars().all()
+
 
     @classmethod
     async def patch_by_id(cls, db: AsyncSession, user_id: str, data: dict[str, Any]) -> None:

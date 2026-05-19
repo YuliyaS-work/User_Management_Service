@@ -140,17 +140,6 @@ class UserFilter(Filter):
         ordering_field_name: list[str] = ["name", "surname"]
 
 
-    def filter_users(self, users_list: list[UserResponse]) -> list[UserResponse]:
-        """
-        Filter a list of users by name and surname fields.
-        """
-        if self.name:
-            users_list = [user for user in users_list if self.name.lower() in user.name.lower()]
-        if self.surname:
-            users_list = [user for user in users_list if self.surname.lower() in user.surname.lower()]
-        return users_list
-
-
     def sort_users(self, users_list: list[UserResponse]) -> list[UserResponse]:
         """
         Sort a list of users.
