@@ -2,8 +2,7 @@
 The module providing handlers for the user information in a profile,
 including  operations.
 """
-import json
-from datetime import timedelta
+import math
 from operator import and_
 from typing import Any, Sequence
 
@@ -370,7 +369,6 @@ async def get_users(
     Returns:
         dict : Data for each role of current user.
     """
-    conditions = []
     response = {}
     roles = {
         "ADMIN": None,
@@ -382,26 +380,18 @@ async def get_users(
         if not role in current_user.roles:
             continue
 
-        # Check role_condition.
-        if role_condition is not None:
-            conditions.append(role_condition)
-
-        if user_filter.name:
-            conditions.append(User.name.ilike(f"%{user_filter.name}%"))
-
-        if user_filter.surname:
-            conditions.append(User.surname.ilike(f"%{user_filter.surname}%"))
-
         # Get data from database.
-        users = await UserDAO.get_all(db, *conditions)
+        users, total_users = await UserDAO.get_all(db, pagination, role_condition, user_filter)
 
-
-        # Get serialized list of users
-        users_list = await get_response_list(users)
-
-        # Filter and sort users for response.
-        sorted_users = user_filter.sort_users(users_list)
-        response[f'{role}'] = paginate(sorted_users, pagination)
+        # Get serialized list of users with pagination data
+        list_users = await get_response_list(users)
+        response[f'{role}'] = {
+            "users": list_users,
+            "total_users": total_users,
+            "page": pagination.page,
+            "size": pagination.size,
+            "total_pages": math.ceil(total_users/pagination.size)
+        }
 
     # Raise error for roles except admin and moderator.
     if response == {}:
