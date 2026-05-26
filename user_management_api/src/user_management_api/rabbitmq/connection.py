@@ -22,10 +22,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.channel = await app.state.connection.channel()
 
+    dlx = await app.state.channel.declare_exchange("dlx_exchange", "direct")
+
     await app.state.channel.declare_queue(
         "reset-password-stream",
+        durable=True,
+        arguments={
+            "x-dead-letter-exchange": "dlx_exchange",
+            "x-dead-letter-routing-key": "dlx_key"
+        }
+    )
+
+    dlq = await app.state.channel.declare_queue(
+        "reset-password-stream-dlq",
         durable=True
     )
+
+    await dlq.bind(dlx, "dlx_key")
+
     try:
         yield
     finally:
