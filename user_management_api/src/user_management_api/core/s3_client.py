@@ -96,7 +96,7 @@ async def create_presigned_url(
 
 async def save_presigned_url_to_redis(presigned_url: str, user_id: str) -> None:
     """
-    Save predesign_url to redis.
+    Save presigned_url to redis.
     """
     ttl = timedelta(seconds=3600)
     await r.setex(f"presigned_url:{user_id}", int(ttl.total_seconds()), presigned_url)

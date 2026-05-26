@@ -4,7 +4,7 @@ Data Access Object for user-related database operations.
 import uuid
 from typing import Any, Optional, Sequence
 
-from sqlalchemy import insert, delete, ColumnElement
+from sqlalchemy import insert, delete, ColumnElement, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
@@ -14,6 +14,7 @@ from src.user_management_api.models import User, Role
 from .role import RoleDAO
 from ..models.assotiations import user_role
 from ..models.roles import StatusRole
+from ..schemas.user import UserFilter, UserPagination
 
 
 class UserDAO(BaseDAO[User]):
@@ -57,14 +58,42 @@ class UserDAO(BaseDAO[User]):
 
 
     @classmethod
-    async def get_all(cls, db: AsyncSession, where: Optional[ColumnElement[bool]]=None) -> Sequence[User]:
-        query = select(cls.model).options(selectinload(cls.model.roles), selectinload(cls.model.group))
+    async def get_all(
+            cls,
+            db: AsyncSession,
+            pagination: UserPagination,
+            role_condition = None,
+            user_filter: UserFilter = None
+    ) -> tuple[Sequence[User], int]:
+        query = select(cls.model)
 
-        if where is not None:
-            query = query.where(where)
+        if role_condition is not None:
+            query = query.where(role_condition)
+
+        if user_filter.name:
+            query = query.where(User.name.ilike(f"%{user_filter.name}%"))
+
+        if user_filter.surname:
+            query = query.where(User.surname.ilike(f"%{user_filter.surname}%"))
+
+        if user_filter.sort_field and hasattr(cls.model, user_filter.sort_field):
+            sorted_column = getattr(cls.model, user_filter.sort_field)
+            if user_filter.order_by == "desc":
+                query = query.order_by(sorted_column.desc())
+            else:
+                query = query.order_by(sorted_column.asc())
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total_items = total_result.scalar()
+
+        query =query.limit(pagination.limit).offset(pagination.offset).options(selectinload(cls.model.roles), selectinload(cls.model.group))
 
         result = await db.execute(query)
-        return result.scalars().all()
+        items = result.scalars().all()
+
+        return items, total_items
+
 
     @classmethod
     async def patch_by_id(cls, db: AsyncSession, user_id: str, data: dict[str, Any]) -> None:

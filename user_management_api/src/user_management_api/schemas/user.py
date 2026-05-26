@@ -122,7 +122,16 @@ class UserPagination(Params):
     """
     Schema for pagination.
     """
+    page: int = 1
     size: int = 30
+
+    @property
+    def limit(self) -> int:
+        return self.size
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.size
 
 
 class UserFilter(Filter):
@@ -138,36 +147,3 @@ class UserFilter(Filter):
     class Constants(Filter.Constants):
         model = User
         ordering_field_name: list[str] = ["name", "surname"]
-
-
-    def filter_users(self, users_list: list[UserResponse]) -> list[UserResponse]:
-        """
-        Filter a list of users by name and surname fields.
-        """
-        if self.name:
-            users_list = [user for user in users_list if self.name.lower() in user.name.lower()]
-        if self.surname:
-            users_list = [user for user in users_list if self.surname.lower() in user.surname.lower()]
-        return users_list
-
-
-    def sort_users(self, users_list: list[UserResponse]) -> list[UserResponse]:
-        """
-        Sort a list of users.
-        """
-        # Result without sorting.
-        if not self.sort_field:
-            return users_list
-
-        sort_field = self.sort_field
-
-        #Check the field in attributes of model.
-        if not hasattr(User, sort_field):
-            return users_list
-
-        #Orderinf list of users.
-        if self.order_by == "desc":
-            reverse = True
-        else:
-            reverse = False
-        return sorted(users_list, key=lambda user: getattr(user, sort_field), reverse=reverse)
