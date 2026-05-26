@@ -8,14 +8,13 @@ import hashlib
 import uuid
 from typing import Any
 
-from fastapi import HTTPException, status, Response
 from pwdlib import PasswordHash
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 
 from src.user_management_api.core.config import settings, r
 from src.user_management_api.exceptions.auth import AuthenticationException
-from src.user_management_api.schemas.auth import PayLoad
+from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken
 
 pwd = PasswordHash.recommended()
 
@@ -44,7 +43,7 @@ def create_access_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "access", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt
 
 def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
@@ -55,23 +54,27 @@ def create_refresh_token(data: dict[str, Any]) -> tuple[str, str]:
     expire = datetime.now(timezone.utc) + timedelta(days=30)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "type": "refresh", "jti": jti})
-    encode_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encode_jwt: str = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encode_jwt, jti
 
 
-def decode_token(token: str) -> PayLoad | None:
+def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | None:
     """
         Decode a JWT refresh token using a secret_key and an algorithm.
     """
     try:
+        payload: PayLoadAccessToken | PayLoadRefreshToken | None = None
         payload_decoded = jwt.decode(token, settings.secret_key, settings.algorithm)
-        payload = PayLoad(**payload_decoded)
+        if payload_decoded["type"] == "access":
+            payload = PayLoadAccessToken(**payload_decoded)
+        if payload_decoded["type"] == "refresh":
+            payload = PayLoadRefreshToken(**payload_decoded)
         return payload
     except JWTError:
         return None
 
 
-def validate_access_token(payload: PayLoad | None) -> str:
+def validate_access_token(payload: PayLoadAccessToken | None) -> bool:
     """
     Validate provided JWT access token.
     """
@@ -89,10 +92,10 @@ def validate_access_token(payload: PayLoad | None) -> str:
     if not user_id:
         raise AuthenticationException(detail="User ID not found")
 
-    return user_id
+    return True
 
 
-async def validate_refresh_token( payload: PayLoad | None, hash_token: str) -> tuple[str, str]:
+async def validate_refresh_token( payload: PayLoadRefreshToken | None, hash_token: str) -> tuple[str, str]:
     """
     Validate provided JWT refresh token.
     """

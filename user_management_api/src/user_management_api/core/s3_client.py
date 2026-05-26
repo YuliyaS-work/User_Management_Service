@@ -7,6 +7,7 @@ replace a file, cache a file.
 import logging
 import time
 from datetime import timedelta
+from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -35,7 +36,12 @@ async def delete_file(bucket: str, image_s3_path: str) -> None:
         raise S3StorageError("The file is not deleted")
 
 
-async def create_presigned_post(bucket: str, image_s3_path: str, region_name: str, expiration=3600) -> str | None:
+async def create_presigned_post(
+        bucket: str,
+        image_s3_path: str,
+        region_name: str,
+        expiration: int =3600
+) -> dict[str, Any]:
     """
     Generate a presigned URL to share an S3 object.
     """
@@ -58,7 +64,11 @@ async def create_presigned_post(bucket: str, image_s3_path: str, region_name: st
         logging.error(e)
         raise S3StorageError("The presigned post is not generated")
 
-async def create_presigned_url(bucket, image_s3_path, region_name, expiration=3600) -> str | None:
+async def create_presigned_url(
+        bucket: str,
+        image_s3_path: str,
+        region_name: str,
+        expiration: int=3600) -> str:
     """
     Generate a presigned URL to share an S3 object.
     """
@@ -77,15 +87,15 @@ async def create_presigned_url(bucket, image_s3_path, region_name, expiration=36
         raise S3StorageError("The presignedurl is not created")
 
 
-async def save_presigned_url_to_redis(presigned_url, user_id) -> None:
+async def save_presigned_url_to_redis(presigned_url: str, user_id: str) -> None:
     """
-    Save predesign_url to redis.
+    Save presigned_url to redis.
     """
     ttl = timedelta(seconds=3600)
     await r.setex(f"presigned_url:{user_id}", int(ttl.total_seconds()), presigned_url)
 
 
-async def delete_presigned_url_from_redis(user_id) -> None:
+async def delete_presigned_url_from_redis(user_id: str) -> None:
     """
     Delete predesign_url from redis.
     """
@@ -95,7 +105,7 @@ async def delete_presigned_url_from_redis(user_id) -> None:
         pass
 
 
-async def get_presigned_url_from_redis(user_id) ->str | None:
+async def get_presigned_url_from_redis(user_id: str) ->str | None:
     """
     Get predesign_url from redis.
     """

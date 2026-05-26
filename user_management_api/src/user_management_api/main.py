@@ -10,12 +10,13 @@ from src.user_management_api.core.exception_handlers import api_exception_handle
 from src.user_management_api.exceptions.auth import APIException
 from src.user_management_api.routers.auth import auth_router
 from src.user_management_api.routers.healthcheck import health_router
-from src.user_management_api.routers.user import user_router
+from src.user_management_api.routers.user import user_router, users_router
 
 app = FastAPI()
 
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(users_router)
 
 app.add_exception_handler(APIException, api_exception_handler)

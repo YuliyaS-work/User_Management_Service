@@ -2,6 +2,7 @@
 Pydantic model used for user authentication, including sign-up and login.
 Provides validation are used for incoming and outgoing authentication data.
 """
+from typing import Self
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -51,15 +52,26 @@ class TokenResponse(BaseModel):
     refresh_token: str
 
 
-class PayLoad(BaseModel):
+class PayLoadAccessToken(BaseModel):
     """
-    Schema for token payload.
+    Schema for access token payload.
+    """
+    sub: str
+    group_id: int | None
+    roles: list[str]
+    exp: int
+    type: str
+    jti: str
+
+
+class PayLoadRefreshToken(BaseModel):
+    """
+    Schema for refresh token payload.
     """
     sub: str
     exp: int
     type: str
     jti: str
-
 
 
 class APIErrorResponse(BaseModel):
@@ -70,8 +82,17 @@ class APIErrorResponse(BaseModel):
     detail: str
 
     @classmethod
-    def from_exception(cls, exc: APIException):
+    def from_exception(cls, exc: APIException) -> Self:
         return cls(
             status_code=exc.status_code,
             detail=exc.detail
         )
+
+
+class CurrentUser(BaseModel):
+    """
+    Schema
+    """
+    user_id: str
+    group_id: int | None
+    roles: list[str]

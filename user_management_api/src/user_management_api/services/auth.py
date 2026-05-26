@@ -6,7 +6,7 @@ including sign-up, login, logout and token refresh operations.
 from datetime import timedelta
 
 import phonenumbers
-from fastapi import HTTPException, Response, Request
+from fastapi import Response, Request
 from phonenumbers.phonenumberutil import NumberParseException
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,27 +14,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
     verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
+from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
-from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse
+from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.utils.auth import send_tokens_to_user, delete_tokens_from_cookies, \
     get_refresh_token_from_cookie, get_access_token_from_cookie
 from src.user_management_api.core.config import r
 
-def get_current_user(request: Request) -> str:
+def get_current_user(request: Request) -> CurrentUser:
     """
     Get a user ID from JWT access token.
     """
     access_token = get_access_token_from_cookie(request)
     payload = decode_token(access_token)
-    user_id = validate_access_token(payload)
-    return user_id
+    validate_access_token(payload)
+    current_user = CurrentUser(
+        user_id=payload.sub,
+        group_id=payload.group_id,
+        roles=payload.roles
+    )
+    return current_user
 
-async def create_and_store_tokens(user_id: str) -> tuple[str, str]:
+async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, str]:
     """
     Create JWT tokens and put refresh token in redis.
     """
-    access_token = create_access_token({"sub": user_id})
+    user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
+
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
+    roles = [role.role_name.value for role in user.roles]
+    access_payload = {
+        "sub": user_id,
+        "group_id": user.group_id,
+        "roles": roles
+    }
+    access_token = create_access_token(access_payload)
     refresh_token, jti = create_refresh_token({"sub": user_id})
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
     return access_token, refresh_token
@@ -105,7 +122,7 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     user_id = str(new_user.id)
 
     # Create tokens, set tokens in cookies and a refresh token in redis.
-    access_token, refresh_token = await create_and_store_tokens(user_id)
+    access_token, refresh_token = await create_and_store_tokens( user_id, db)
     send_tokens_to_user(response, access_token, refresh_token)
 
     return TokenResponse(
@@ -154,7 +171,7 @@ async def login_user(request: Request, response: Response, user_data: UserLogin,
     user_id = str(user.id)
 
     # Create tokens, set tokens in cookies and a refresh token in redis.
-    access_token, refresh_token = await create_and_store_tokens(user_id)
+    access_token, refresh_token = await create_and_store_tokens(user_id, db)
     send_tokens_to_user(response, access_token, refresh_token)
 
     return TokenResponse(
@@ -185,13 +202,14 @@ async def logout_user(
         delete_tokens_from_cookies(response)
 
 
-async def renew_tokens(request: Request, response: Response) -> TokenResponse:
+async def renew_tokens(request: Request, response: Response, db: AsyncSession) -> TokenResponse:
     """
     Renew JWT tokens with an old refresh_token.
 
     Args:
         response (Response): save JWT tokens in cookies.
         request (Request): get JWT tokens from cookies.
+        db (AsyncSession): Database session.
     Returns:
         TokenResponse: An access and refresh tokens.
     """
@@ -201,7 +219,7 @@ async def renew_tokens(request: Request, response: Response) -> TokenResponse:
         await delete_refresh_token_from_redis(user_id, jti)
 
         # Create tokens, set tokens in cookies and a refresh token in redis.
-        new_access_token, new_refresh_token = await create_and_store_tokens(user_id)
+        new_access_token, new_refresh_token = await create_and_store_tokens(user_id, db)
         send_tokens_to_user(response, new_access_token, new_refresh_token)
 
         return TokenResponse(
