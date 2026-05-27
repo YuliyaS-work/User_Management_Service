@@ -123,7 +123,7 @@ async def create_presigned_url(
 
 async def save_presigned_url_to_redis(presigned_url: str, user_id: str) -> None:
     """
-    Save predesign_url to redis.
+    Save presigned_url to redis.
     """
     logger.info(f"Start: saving presigned url avatar to redis, url={presigned_url}, user ID={user_id}")
     try:
