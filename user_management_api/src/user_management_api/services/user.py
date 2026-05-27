@@ -253,16 +253,16 @@ async def confirm_avatar(
     if user is None:
         raise ResourceNotFound("User is not found")
 
-    if user.image_s3_path:
-        await delete_file(bucket, user.image_s3_path)
-        await delete_presigned_url_from_redis(current_user.user_id)
-
     try:
         await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
         await db.commit()
     except:
         await db.rollback()
         raise ResourceNotFound("User is not found")
+
+    if user.image_s3_path:
+        await delete_file(bucket, user.image_s3_path)
+        await delete_presigned_url_from_redis(current_user.user_id)
 
     presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
     await save_presigned_url_to_redis(presigned_url, current_user.user_id)
