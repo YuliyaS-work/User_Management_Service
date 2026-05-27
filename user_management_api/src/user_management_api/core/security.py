@@ -5,6 +5,7 @@ Defines functions for password hashing, password verification
 and generating access and refresh tokens.
 """
 import hashlib
+import logging
 import uuid
 from typing import Any
 
@@ -15,6 +16,9 @@ from datetime import datetime, timedelta, timezone
 from src.user_management_api.core.config import settings, r
 from src.user_management_api.exceptions.auth import AuthenticationException
 from src.user_management_api.schemas.auth import PayLoadAccessToken, PayLoadRefreshToken, PayLoadResetPasswordToken
+
+# Create a module specific logger
+logger = logging.getLogger(__name__)
 
 pwd = PasswordHash.recommended()
 
@@ -86,7 +90,7 @@ def decode_token(token: str) -> PayLoadAccessToken | PayLoadRefreshToken | PayLo
         elif token_type == "reset_password":
             return PayLoadResetPasswordToken(**payload_decoded)
         else:
-            raise AuthenticationException("Unknown token type")
+            raise AuthenticationException(detail="Unknown token type")
 
     except JWTError:
         raise AuthenticationException(detail="Token invalid")
@@ -135,8 +139,11 @@ async def validate_refresh_token( payload: PayLoadRefreshToken, hash_token: str)
         raise AuthenticationException(detail="User ID not found")
 
     # Check refresh token in blacklist.
-    if await r.get(f"revoked_token:{user_id}:{jti}"):
-        raise AuthenticationException(detail="Token has been revoked")
+    try:
+        if await r.get(f"revoked_token:{user_id}:{jti}"):
+            raise AuthenticationException(detail="Token has been revoked")
+    except Exception as e:
+        logger.warning(f"Redis error: {e}")
 
     # Check hash of a provided refresh token with hash in redis.
     if hash_token != saved_hash:

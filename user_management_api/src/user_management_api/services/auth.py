@@ -4,6 +4,7 @@ including sign-up, login, logout, token refresh operations,
 reset a user's password and save a new user's password into tha database.
 """
 import json
+import logging
 from datetime import timedelta, datetime, timezone
 
 import phonenumbers
@@ -27,6 +28,9 @@ from src.user_management_api.utils.auth import send_tokens_to_user, delete_token
     get_refresh_token_from_cookie, get_access_token_from_cookie
 from src.user_management_api.core.config import r
 
+# Create a module specific logger
+logger = logging.getLogger(__name__)
+
 
 def get_current_user(request: Request) -> CurrentUser:
     """
@@ -46,6 +50,7 @@ async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, 
     """
     Create JWT tokens and put refresh token in redis.
     """
+    logger.info(f"Start: creating and saving tokens for user ID={user_id}")
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
 
     if user is None:
@@ -60,6 +65,7 @@ async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, 
     access_token = create_access_token(access_payload)
     refresh_token, jti = create_refresh_token({"sub": user_id})
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
+    logger.info(f"Success: access and refresh tokens are created")
     return access_token, refresh_token
 
 
@@ -67,28 +73,42 @@ async def delete_refresh_token_from_redis(user_id: str, jti: str) -> None:
     """
     Delete refresh token hash and indicate jti of the refresh token is "revoked".
     """
-    await r.delete(f"refresh_token:{user_id}")
-    await r.set(f"revoked_token:{user_id}:{jti}", "true")
+    logger.info(f"Start: deleting refresh token from redis for user ID={user_id}, jti={jti}")
+
+    try:
+        await r.delete(f"refresh_token:{user_id}")
+        await r.set(f"revoked_token:{user_id}:{jti}", "true")
+        logger.info(f"Success: refresh token was deleted from redis for user ID={user_id}")
+    except Exception as e:
+        logger.warning(f"Redis error: {e}")
 
 
-async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> str:
+async def save_refresh_token_to_redis(refresh_token: str, jti: str, user_id: str) -> None:
     """
     Save refresh token hash to redis.
     """
-    token_hash = get_token_hash(refresh_token)
-    ttl = timedelta(days=30)
-    refresh_token = await r.setex(f"refresh_token:{user_id}", int(ttl.total_seconds()), token_hash)
-    return refresh_token
+    logger.info(f"Start: saving refresh token to redis for user ID={user_id}, jti={jti}")
+
+    try:
+        token_hash = get_token_hash(refresh_token)
+        ttl = timedelta(days=30)
+        await r.setex(f"refresh_token:{user_id}", int(ttl.total_seconds()), token_hash)
+        logger.info(f"Success: refresh token was saved to redis for user ID={user_id}")
+
+    except Exception as e:
+        logger.warning(f"Redis error: {e}")
 
 
 async def verify_refresh_token(request: Request) -> tuple[str, str]:
     """
     Verify refresh token from cookies to one stored in redis.
     """
+    logger.info(f"Start: verifying refresh token from cookies")
     old_refresh_token = get_refresh_token_from_cookie(request)
     payload = decode_token(old_refresh_token)
     hash_token = get_token_hash(old_refresh_token)
     user_id, jti = await validate_refresh_token(payload, hash_token)
+    logger.info(f"Success: refresh token verified for user ID={user_id}")
     return user_id, jti
 
 
@@ -103,6 +123,8 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     Returns:
         TokenResponse: An access and refresh tokens.
     """
+    logger.info(f"Start: user registration, data={user_data.model_dump()}")
+
      # Compare the data in login field with email, username and phone number in the database.
     if await UserDAO.find_one_or_none(db, User.username == user_data.username):
         raise ConflictException(detail="Username already exists")
@@ -131,6 +153,8 @@ async def register_user(response: Response, user_data: UserRegister, db: AsyncSe
     access_token, refresh_token = await create_and_store_tokens( user_id, db)
     send_tokens_to_user(response, access_token, refresh_token)
 
+    logger.info(f"Success: user registered: user ID={user_id}")
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token
@@ -148,6 +172,8 @@ async def login_user(request: Request, response: Response, user_data: UserLogin,
     Returns:
         TokenResponse: An access and refresh tokens.
     """
+    logger.info(f"Start: user log in, data={user_data.login}")
+
     # Compare the data in login field with email, username and phone number in the database.
     filters = [User.username == user_data.login, User.email == user_data.login]
 
@@ -180,6 +206,8 @@ async def login_user(request: Request, response: Response, user_data: UserLogin,
     access_token, refresh_token = await create_and_store_tokens(user_id, db)
     send_tokens_to_user(response, access_token, refresh_token)
 
+    logger.info(f"Success: user logged in: user ID={user_id}")
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token
@@ -199,13 +227,17 @@ async def logout_user(
     Returns:
         dict: Message about success of log out.
     """
+    logger.info(f"Start: user log out")
+
     # Verify refresh token from cookies and move it to the blacklist.
     try:
         user_id, jti = await verify_refresh_token(request)
         await delete_refresh_token_from_redis(user_id, jti)
+        logger.info(f"Success: user logged out: user ID={user_id}")
         return {"message": "User logged out"}
     finally:
         delete_tokens_from_cookies(response)
+
 
 
 async def renew_tokens(request: Request, response: Response, db: AsyncSession) -> TokenResponse:
@@ -219,6 +251,8 @@ async def renew_tokens(request: Request, response: Response, db: AsyncSession) -
     Returns:
         TokenResponse: An access and refresh tokens.
     """
+
+    logger.info(f"Start: renewing access and refresh tokens.")
     try:
         # Verify a refresh token and move it to the blacklist.
         user_id, jti = await verify_refresh_token(request)
@@ -227,6 +261,8 @@ async def renew_tokens(request: Request, response: Response, db: AsyncSession) -
         # Create tokens, set tokens in cookies and a refresh token in redis.
         new_access_token, new_refresh_token = await create_and_store_tokens(user_id, db)
         send_tokens_to_user(response, new_access_token, new_refresh_token)
+
+        logger.info(f"Success: tokens are renewed for user ID={user_id}.")
 
         return TokenResponse(
             access_token=new_access_token,
@@ -253,6 +289,8 @@ async def reset_password(
     Returns:
         dict[str, str]: Confirm that the message was published to RabbitMQ.
     """
+    logger.info(f"Start: reset password.")
+
     # Create a reset-password token.
     token = create_reset_password_token(data.email)
 
@@ -274,6 +312,8 @@ async def reset_password(
         request.app,
         json.dumps(message)
     )
+    logger.info(f"Success: message sent to RabbitMQ for user email={data.email}.")
+
     return {"message": "Message sent to RabbitMQ"}
 
 
@@ -290,6 +330,8 @@ async def save_password(
     Returns:
         dict[str,str]: Confirm a message about the password update result.
     """
+    logger.info(f"Start: saving new password, user token={data.token}.")
+
     payload = decode_token(data.token)
     validate_reset_password_token(payload)
 
@@ -308,5 +350,7 @@ async def save_password(
         raise APIException("Failed to update password.")
 
     await db.commit()
+
+    logger.info(f"Success: password saved, user ID={user.id}.")
 
     return {"message": "Password was changed successfully"}

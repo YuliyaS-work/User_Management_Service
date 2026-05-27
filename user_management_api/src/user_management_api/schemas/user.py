@@ -103,6 +103,7 @@ class UserResponse(BaseModel):
     username: str
     phone_number: Any | None
     email: str
+    image_s3_path: str | None
     is_blocked: bool
     created_at: datetime
     modified_at: datetime

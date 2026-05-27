@@ -30,8 +30,6 @@ services:
       image: rabbitmq:3-management
       healthcheck:
         test: "rabbitmqctl node_health_check"
-#        test: [ "CMD", "rabbitmq_diagnostics", "check_running" ]
-#        test: [ "CMD-SHELL", "nc -z localhost 5672" ]
         interval: 10s
         timeout: 10s
         retries: 20

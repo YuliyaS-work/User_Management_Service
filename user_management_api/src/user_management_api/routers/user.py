@@ -18,8 +18,8 @@ from src.user_management_api.services.auth import get_current_user
 from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, \
     delete_avatar, get_presigned_post, confirm_avatar, get_user, patch_user, get_users
 
-user_router = APIRouter(prefix="/user")
-users_router = APIRouter(prefix="/users")
+user_router = APIRouter(prefix="/user", tags=["User"])
+users_router = APIRouter(prefix="/users", tags=["Users"])
 
 cookie_schema = APIKeyCookie(name="access_token")
 

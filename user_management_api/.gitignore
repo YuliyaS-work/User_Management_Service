@@ -172,3 +172,5 @@ secrets/
 *.pem
 *.key
 *.env
+logs/
+*.log
