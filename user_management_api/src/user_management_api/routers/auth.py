@@ -11,7 +11,7 @@ from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenR
 from src.user_management_api.services.auth import register_user, login_user, logout_user, renew_tokens, reset_password, \
     save_password
 
-auth_router = APIRouter(prefix="/test_core", tags=["Auth"])
+auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @auth_router.post("/signup", response_model=TokenResponse, status_code=201)

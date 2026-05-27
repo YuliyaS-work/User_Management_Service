@@ -3,11 +3,12 @@ The module providing handlers for the user information in a profile,
 including  operations.
 """
 import logging
+import math
 from operator import and_
 from typing import Any, Sequence
+from uuid import UUID
 
 from fastapi import Depends, Request, Response
-from fastapi_pagination import paginate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings
@@ -20,7 +21,6 @@ from src.user_management_api.exceptions.user import AuthorizationError, Resource
 from src.user_management_api.models import User
 from src.user_management_api.redis.redis_s3 import delete_presigned_url_from_redis, get_presigned_url_from_redis, \
     save_presigned_url_to_redis
-from src.user_management_api.redis.user import save_list_users_to_redis, get_list_users_from_redis
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet, \
     PresignedPostResponse, ConfirmAvatarRequest, UserResponse, UserPatchByAdmin, UserFilter, UserPagination, \
@@ -143,10 +143,13 @@ async def patch_me(
     Returns:
         UserResponse: Updated user profile information.
     """
-    logger.info(f"Start: patch user data by ID={current_user.user_id}")
-
-    await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
-    await db.commit()
+    try:
+        logger.info(f"Start: patch user data by ID={current_user.user_id}")
+        await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
+        await db.commit()
+    except:
+        await db.rollback()
+        raise ResourceNotFound("User is not found")
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
 
@@ -228,7 +231,6 @@ async def confirm_avatar(
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
         region_name: str = settings.aws_region,
-
 ) -> UserResponse:
     """
     Return a presign url for an avatar usage.
@@ -255,8 +257,12 @@ async def confirm_avatar(
         await delete_file(bucket, user.image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
 
-    await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
-    await db.commit()
+    try:
+        await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
+        await db.commit()
+    except:
+        await db.rollback()
+        raise ResourceNotFound("User is not found")
 
     presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
     await save_presigned_url_to_redis(presigned_url, current_user.user_id)
@@ -291,10 +297,14 @@ async def delete_avatar(
         raise ResourceNotFound("User is not found")
 
     if user.image_s3_path:
+        try:
+            await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
+            await db.commit()
+        except:
+            await db.rollback()
+            raise ResourceNotFound("User is not found")
         await delete_file(bucket, user.image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
-        await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
-        await db.commit()
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
 
@@ -304,7 +314,7 @@ async def delete_avatar(
 
 
 async def get_user(
-        user_id: str,
+        user_id: UUID,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
 ) -> UserResponse | None:
@@ -338,7 +348,7 @@ async def get_user(
 
 
 async def patch_user(
-        user_id: str,
+        user_id: UUID,
         data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
@@ -359,13 +369,15 @@ async def patch_user(
     if "ADMIN" in current_user.roles:
         data_user = data.model_dump(exclude_unset=True)
         roles_id = data_user.pop("roles_id", None)
-        await UserDAO.patch_by_id(db, user_id, data_user)
-
-        if roles_id is not None:
-            await UserDAO.update_user_role(db, user_id, roles_id)
-        await db.commit()
+        try:
+            await UserDAO.patch_by_id(db, user_id, data_user)
+            if roles_id is not None:
+                await UserDAO.update_user_role(db, user_id, roles_id)
+            await db.commit()
+        except:
+            await db.rollback()
+            raise ResourceNotFound("User is not found")
         user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
-
     else:
         raise AuthorizationError("Not allowed")
 
@@ -406,38 +418,27 @@ async def get_users(
 
     response = {}
     roles = {
-        "ADMIN": [None, "ADMIN"],
-        "MODERATOR": [User.group_id == current_user.group_id, current_user.user_id]
+        "ADMIN": None,
+        "MODERATOR": User.group_id == current_user.group_id
     }
 
-    for role, condition in roles.items():
+    for role, role_condition in roles.items():
         # Check allowed role.
         if not role in current_user.roles:
             continue
 
-        # Get data from redis.
-        users_list_from_redis = await get_list_users_from_redis(role, condition[1])
+        # Get data from database.
+        users, total_users = await UserDAO.get_all(db, pagination, role_condition, user_filter)
 
-        if users_list_from_redis:
-            users_list = [UserResponse(**user) for user in users_list_from_redis]
-        else:
-            # Get data from database if data from redis is unavailable.
-            if condition[0] is not None:
-                users = await UserDAO.get_all(db, condition[0])
-            else:
-                users = await UserDAO.get_all(db)
-
-            # Get serialized list of users
-            users_list = await get_response_list(users)
-
-            # Cache data to redis.
-            users_to_redis = [user.model_dump(mode='json') for user in users_list]
-            await save_list_users_to_redis(users_to_redis, role, condition[1])
-
-        # Filter and sort users for response.
-        filtered_users = user_filter.filter_users(users_list)
-        sorted_users = user_filter.sort_users(filtered_users)
-        response[f'{role}'] = paginate(sorted_users, pagination)
+        # Get serialized list of users with pagination data
+        list_users = await get_response_list(users)
+        response[f'{role}'] = {
+            "users": list_users,
+            "total_users": total_users,
+            "page": pagination.page,
+            "size": pagination.size,
+            "total_pages": math.ceil(total_users/pagination.size)
+        }
 
     # Raise error for roles except admin and moderator.
     if response == {}:

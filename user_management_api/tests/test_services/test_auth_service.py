@@ -177,7 +177,7 @@ async def test_verify_refresh_token_fail(
     mock_validate_refresh_token.side_effect = AuthenticationException
 
     # Act
-    with pytest.raises(AuthenticationException) as e:
+    with pytest.raises(AuthenticationException):
         await verify_refresh_token(get_fake_request)
 
     # Assert

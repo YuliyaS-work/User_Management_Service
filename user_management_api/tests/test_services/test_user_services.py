@@ -1,19 +1,15 @@
 import copy
-import uuid
-from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 import pytest
-from fastapi_pagination import Params
 
 from src.user_management_api.core.config import settings
 from src.user_management_api.exceptions.auth import AuthenticationException
 from src.user_management_api.exceptions.user import S3StorageError, ResourceNotFound, AuthorizationError
-from src.user_management_api.models import Group, User
 from src.user_management_api.models.roles import StatusRole
 from src.user_management_api.schemas.auth import CurrentUser
-from src.user_management_api.schemas.user import PresignUrlGet, ConfirmAvatarRequest, UserResponse, RoleResponse, \
-    UserPatchByAdmin
+from src.user_management_api.schemas.user import ConfirmAvatarRequest, UserResponse, \
+    UserPatchByAdmin, UserFilter, UserPagination
 from src.user_management_api.services.user import get_me, delete_me, patch_me, get_avatar, confirm_avatar, \
     delete_avatar, get_presigned_post, get_user, patch_user, get_users, serialize_user_data
 
@@ -209,6 +205,41 @@ async def test_patch_me_success(
     assert result.name == "new_name"
     mock_find_user_with_related_data.assert_called_once()
     mock_patch_user.assert_called_once()
+    mock_db.commit.assert_called_once()
+    mock_db.rollback.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.user.UserDAO.patch_by_id")
+@patch("src.user_management_api.services.user.UserDAO.find_one_or_none_with_related_data")
+async def test_patch_me_user_not_found(
+        mock_find_user_with_related_data,
+        mock_patch_user,
+        mock_user,
+        mock_db
+):
+    """
+    patch_me() should raise ResourceNotFound when the user does not exist.
+    """
+    # Arrange
+    mock_patch_user.side_effect = ResourceNotFound
+
+    data = MagicMock()
+    data.model_dump.return_value = {"name": "new_name"}
+
+    current_user = CurrentUser(user_id=str(mock_user.id), group_id=1, roles=["USER"])
+
+    # Act
+    with pytest.raises(ResourceNotFound) as e:
+        result = await patch_me(data, mock_db, current_user)
+
+    # Assert
+    assert e.value.detail == "User is not found"
+    mock_db.rollback.assert_called_once()
+    mock_db.commit.assert_not_called()
+    mock_find_user_with_related_data.assert_not_called()
+
+
 
 
 @pytest.mark.asyncio
@@ -336,13 +367,17 @@ async def test_confirm_avatar_success(
     mock_delete_presigned_url.assert_called_once()
     mock_find_user_with_related_data.assert_called_once()
     mock_save_presigned_url.assert_called_once_with("presigned_url", str(mock_user.id))
+    mock_db.commit.assert_called_once()
+    mock_db.rollback.assert_not_called()
 
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.user.get_presigned_url_from_redis")
+@patch("src.user_management_api.services.user.UserDAO.patch_by_id")
 @patch("src.user_management_api.services.user.UserDAO.find_one_or_none")
 async def test_confirm_avatar_not_found_user(
         mock_find_user,
+        mock_patch_by_id,
         mock_get_presigned_url_from_redis,
         mock_db,
         mock_user
@@ -361,6 +396,39 @@ async def test_confirm_avatar_not_found_user(
 
     # Assert
     assert e.value.detail == "User is not found"
+    mock_patch_by_id.assert_not_called()
+    mock_get_presigned_url_from_redis.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.user.get_presigned_url_from_redis")
+@patch("src.user_management_api.services.user.UserDAO.patch_by_id")
+@patch("src.user_management_api.services.user.UserDAO.find_one_or_none")
+async def test_confirm_avatar_patch_user_failed(
+        mock_find_user,
+        mock_patch_by_id,
+        mock_get_presigned_url_from_redis,
+        mock_db,
+        mock_user
+):
+    """
+    confirm_avatar() should raise ResourceNotFound when user does not exist.
+    """
+    # Arrange
+    mock_find_user.return_value = mock_user
+    mock_patch_by_id.side_effect = ResourceNotFound
+    body = ConfirmAvatarRequest(key="key")
+    current_user = CurrentUser(user_id=str(mock_user.id), group_id=1, roles=["USER"])
+
+    # Act
+    with pytest.raises(ResourceNotFound) as e:
+        await confirm_avatar(body, mock_db, current_user)
+
+    # Assert
+    assert e.value.detail == "User is not found"
+    mock_db.rollback.assert_called_once()
+    mock_get_presigned_url_from_redis.assert_not_called()
+    mock_db.commit.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -421,6 +489,33 @@ async def test_delete_avatar_not_found_user(
 
     # Assert
     assert e.value.detail == "User is not found"
+
+@pytest.mark.asyncio
+@patch("src.user_management_api.services.user.UserDAO.patch_by_id")
+@patch("src.user_management_api.services.user.UserDAO.find_one_or_none")
+async def test_delete_avatar_patch_user_failed(
+        mock_find_user,
+        mock_patch_by_id,
+        mock_db,
+        mock_user
+):
+    """
+    delete_avatar() should raise ResourceNotFound when user does not exist.
+    """
+    # Arrange
+    mock_patch_by_id.side_effect = ResourceNotFound
+    mock_find_user.return_value = mock_user
+    current_user = CurrentUser(user_id=str(mock_user.id), group_id=1, roles=["USER"])
+
+    # Act
+    with pytest.raises(ResourceNotFound) as e:
+        await delete_avatar(mock_db, current_user)
+
+    # Assert
+    assert e.value.detail == "User is not found"
+    mock_db.rollback.assert_called_once()
+    mock_db.commit.assert_not_called()
+    mock_find_user.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -625,7 +720,7 @@ async def test_patch_user_not_allowed(mock_db):
     patch_user() should raise AuthorizationError when USER or MODERATOR attempts to modify another user.
     """
     # Arrange
-    data = MagicMock
+    data = MagicMock()
     current_user = CurrentUser(user_id="123", group_id=1, roles=["USER"])
 
     # Act
@@ -637,6 +732,40 @@ async def test_patch_user_not_allowed(mock_db):
 
 
 @pytest.mark.asyncio
+@patch("src.user_management_api.services.user.UserDAO.find_one_or_none_with_related_data")
+@patch("src.user_management_api.services.user.UserDAO.update_user_role")
+@patch("src.user_management_api.services.user.UserDAO.patch_by_id")
+async def test_patch_user_patch_failed(
+        mock_patch_by_id,
+        mock_update_user_role,
+        mock_find_user_with_related_data,
+        mock_db,
+        mock_user_data
+):
+    """
+    patch_user() should raise ResourceNotFound when updating the user record fails.
+    """
+    # Arrange
+    role_1 = MagicMock(id = 1, role_name = StatusRole.USER)
+    role_2 = MagicMock(id = 2, role_name = StatusRole.MODERATOR)
+    user = mock_user_data()
+    user.roles = [role_1]
+    data = MagicMock()
+    current_user = CurrentUser(user_id="123", group_id=1, roles=["ADMIN"])
+    mock_patch_by_id.side_effect = ResourceNotFound
+    # Act
+    with pytest.raises(ResourceNotFound) as e:
+        await patch_user("123", data, mock_db, current_user)
+
+    # Assert
+    assert e.value.detail == "User is not found"
+    mock_db.rollback.assert_called_once()
+    mock_db.commit.assert_not_called()
+    mock_update_user_role.assert_not_called()
+    mock_find_user_with_related_data.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "roles, expected_key",
     [
@@ -644,13 +773,11 @@ async def test_patch_user_not_allowed(mock_db):
         (["MODERATOR"], "MODERATOR"),
     ]
 )
-@patch("src.user_management_api.services.user.get_list_users_from_redis")
-@patch("src.user_management_api.services.user.save_list_users_to_redis")
 @patch("src.user_management_api.services.user.UserDAO.get_all")
+@patch("src.user_management_api.services.user.get_response_list")
 async def test_get_users_admin_moderator_success(
+        mock_get_response_list,
         mock_get_all,
-        mock_save_list_users_to_redis,
-        mock_get_list_users_from_redis,
         mock_db,
         roles,
         expected_key,
@@ -660,25 +787,29 @@ async def test_get_users_admin_moderator_success(
     get_users() should return filtered and sorted user list for ADMIN or MODERATOR.
     """
     # Arrange
-    mock_get_list_users_from_redis.return_value = None
     role = MagicMock(id=1, role_name=StatusRole.USER)
     user = mock_user_data()
     user.roles = [role]
-    mock_get_all.return_value = [user]
+    mock_get_all.return_value = ([user], 1)
+    mock_get_response_list.return_value = ["serialized_users"]
     current_user = CurrentUser(user_id=str(user.id), group_id=1, roles=roles)
 
-    user_filter = MagicMock()
-    user_filter.filter_users.return_value = ["filtered"]
-    user_filter.sort_users.return_value = ["sorted"]
-
-    pagination = Params(page=1, size=30)
+    user_filter = UserFilter()
+    pagination = UserPagination(page=1, size=30)
 
     # Act
     result = await get_users(mock_db, current_user, user_filter, pagination)
 
     # Assert
     assert expected_key in result
-    mock_get_all.assert_called_once()
+    data = result[expected_key]
+    assert data["users"] == ["serialized_users"]
+    assert data["total_users"] == 1
+    assert data["page"] == 1
+    assert data["size"] == 30
+    assert data["total_pages"] == 1
+    mock_get_all.assert_called_once_with(mock_db, pagination, ANY, user_filter)
+    mock_get_response_list.assert_called_once_with([user])
 
 
 @pytest.mark.asyncio
@@ -692,11 +823,8 @@ async def test_get_users_wrong_role(mock_db, mock_user_data):
     user.roles = [role]
     current_user = CurrentUser(user_id=str(user.id), group_id=1, roles=["USER"])
 
-    user_filter = MagicMock()
-    user_filter.filter_users.return_value = ["filtered"]
-    user_filter.sort_users.return_value = ["sorted"]
-
-    pagination = Params(page=1, size=30)
+    user_filter = UserFilter()
+    pagination = UserPagination(page=1, size=30)
 
     # Act
     with pytest.raises(AuthorizationError) as e:
@@ -704,61 +832,3 @@ async def test_get_users_wrong_role(mock_db, mock_user_data):
 
     # Assert
     assert e.value.detail == "Not allowed"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "roles, expected_key",
-    [
-        (["ADMIN"], "ADMIN"),
-        (["MODERATOR"], "MODERATOR"),
-    ]
-)
-@patch("src.user_management_api.services.user.get_list_users_from_redis")
-@patch("src.user_management_api.services.user.save_list_users_to_redis")
-@patch("src.user_management_api.services.user.UserDAO.get_all")
-async def test_get_users_list_in_redis(
-        mock_get_all,
-        mock_save_list_users_to_redis,
-        mock_get_list_users_from_redis,
-        mock_db,
-        roles,
-        expected_key
-):
-    """
-    get_users() should return cached user list from Redis when available.
-    """
-    # Arrange
-    list_users = [
-        {
-            "id": str(uuid.uuid4()),
-            "name": "name",
-            "surname": "surname",
-            "username": "username",
-            "phone_number": "+375291111111",
-            "email": "user@example.com",
-            "image_s3_path": "image.webp",
-            "is_blocked": False,
-            "created_at": datetime.now(),
-            "modified_at": datetime.now(),
-            "group": {"id": 1, "group_name": "First"},
-            "roles": [{"id": 1, "role_name": "USER"}]
-        }
-    ]
-    mock_get_list_users_from_redis.return_value = list_users
-
-    mock_get_all.return_value = None
-    current_user = CurrentUser(user_id="123", group_id=1, roles=roles)
-
-    user_filter = MagicMock()
-    user_filter.filter_users.return_value = ["filtered"]
-    user_filter.sort_users.return_value = ["sorted"]
-
-    pagination = Params(page=1, size=30)
-
-    # Act
-    result = await get_users(mock_db, current_user, user_filter, pagination)
-
-    # Assert
-    assert expected_key in result
-    mock_get_all.assert_not_called()

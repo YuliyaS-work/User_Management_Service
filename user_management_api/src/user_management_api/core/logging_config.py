@@ -2,6 +2,7 @@
 Initialize application logging with a non-blocking queue-based architecture.
 """
 import logging.config
+from contextlib import asynccontextmanager
 from logging.handlers import QueueListener
 from queue import Queue
 
@@ -64,3 +65,12 @@ def setup_logging(app: FastAPI) -> None:
     listener.start()
 
     app.state.log_listener = listener
+
+
+@asynccontextmanager
+async def logging_lifespan(app: FastAPI):
+    setup_logging(app)
+    try:
+        yield
+    finally:
+        app.state.log_listener.stop()
