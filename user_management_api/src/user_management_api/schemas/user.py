@@ -58,10 +58,10 @@ class ProfileUserPatch(BaseModel):
         return validate_phone_number_signup(value)
 
     @model_validator(mode="after")
-    def ensure_not_empty_data(cls, value):
-        if not value.model_dump(exclude_unset=True):
+    def ensure_not_empty_data(self) -> "ProfileUserPatch":
+        if not self.model_dump(exclude_unset=True):
             raise ValueError("At least one field must be provided for update.")
-        return value
+        return self
 
 class UserPatchByAdmin(ProfileUserPatch):
     """

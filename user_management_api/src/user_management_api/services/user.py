@@ -140,7 +140,6 @@ async def patch_me(
     return serialise_user_data(user)
 
 
-
 async def get_avatar(
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),

@@ -1,26 +1,32 @@
 """
 Authentication module providing handlers for user authentication,
-including sign-up, login, logout and token refresh operations.
+including sign-up, login, logout, token refresh operations,
+reset a user's password and save a new user's password into tha database.
 """
-
-from datetime import timedelta
+import json
+from datetime import timedelta, datetime, timezone
 
 import phonenumbers
-from fastapi import Response, Request
+from fastapi import Response, Request, BackgroundTasks, status
 from phonenumbers.phonenumberutil import NumberParseException
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
-    verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token
+    verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token, \
+    create_reset_password_token, validate_reset_password_token
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
 from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
-from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser
+from src.user_management_api.rabbitmq.publisher import publish_message
+
+from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser, \
+    ForgetPasswordRequest, ResetPasswordRequest
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.utils.auth import send_tokens_to_user, delete_tokens_from_cookies, \
     get_refresh_token_from_cookie, get_access_token_from_cookie
 from src.user_management_api.core.config import r
+
 
 def get_current_user(request: Request) -> CurrentUser:
     """
@@ -229,3 +235,78 @@ async def renew_tokens(request: Request, response: Response, db: AsyncSession) -
     except APIException:
         delete_tokens_from_cookies(response)
         raise
+
+
+async def reset_password(
+        background_tasks: BackgroundTasks,
+        data: ForgetPasswordRequest,
+        request: Request
+) -> dict[str, str]:
+    """
+    Generate a reset-password token and publish an email message to RabbitMQ.
+
+    Args:
+        background_tasks (BackgroundTasks): Schedules publishing the message asynchronously.
+        data (ForgetPasswordRequest): A user's email used to generate reset token.
+        request (Request): used to build the reset-password URL.
+
+    Returns:
+        dict[str, str]: Confirm that the message was published to RabbitMQ.
+    """
+    # Create a reset-password token.
+    token = create_reset_password_token(data.email)
+
+    # Create a link to reset a password.
+    reset_link = f"{request.base_url}reset-password?token={token}"
+
+    # Create an email message for publishing.
+    message = {
+        "subject": "Reset your password",
+        "body": f"Click the link to reset your password: {reset_link}",
+        "email": data.email,
+        "token": token,
+        "datetime": datetime.now(timezone.utc).isoformat()
+    }
+
+    # Publish a reset-password message to RabbitMQ asynchronously.
+    background_tasks.add_task(
+        publish_message,
+        request.app,
+        json.dumps(message)
+    )
+    return {"message": "Message sent to RabbitMQ"}
+
+
+async def save_password(
+        data: ResetPasswordRequest,
+        db: AsyncSession
+) -> dict[str, str]:
+    """
+    Validate the reset-password token and update the user's password into the database.
+
+    Args:
+        data (ResetPasswordRequest): A token and a new password provided by the user.
+        db (AsyncSession): Database session.
+    Returns:
+        dict[str,str]: Confirm a message about the password update result.
+    """
+    payload = decode_token(data.token)
+    validate_reset_password_token(payload)
+
+    new_password_hash = get_password_hash(data.new_password)
+
+    user = await UserDAO.find_one_or_none(db, User.email == payload.sub)
+    if user is None:
+        raise ResourceNotFound("User is not found")
+
+    if  verify_password(data.new_password, user.password):
+        return {"message": "Don't use the old password."}
+
+    try:
+        await UserDAO.patch_by_id(db, str(user.id), {"password": new_password_hash})
+    except:
+        raise APIException("Failed to update password.")
+
+    await db.commit()
+
+    return {"message": "Password was changed successfully"}

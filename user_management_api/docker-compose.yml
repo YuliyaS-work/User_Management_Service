@@ -26,6 +26,26 @@ services:
         - redis_data:/data
       command: redis-server --bind 0.0.0.0 --requirepass ${REDIS_PASSWORD} --appendonly yes
 
+    rabbitmq:
+      image: rabbitmq:3-management
+      healthcheck:
+        test: "rabbitmqctl node_health_check"
+#        test: [ "CMD", "rabbitmq_diagnostics", "check_running" ]
+#        test: [ "CMD-SHELL", "nc -z localhost 5672" ]
+        interval: 10s
+        timeout: 10s
+        retries: 20
+        start_period: 20s
+      container_name: rabbit
+      environment:
+        - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_DEFAULT_VHOST}
+        - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+        - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      ports:
+        - "5672:5672"
+        - "15672:15672"
+      volumes:
+        - rabbitmq_data:/var/lib/rabbitmq
 
 
     ums_app:
@@ -44,14 +64,18 @@ services:
         - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
         - AWS_REGION=${AWS_REGION}
         - BUCKET_NAME=${BUCKET_NAME}
+        - RABBITMQ_URL=${RABBITMQ_URL}
       depends_on:
         db_ums:
           condition: service_healthy
         redis:
           condition: service_started
+        rabbitmq:
+          condition: service_healthy
       ports:
         - "8000:8000"
 
 volumes:
   postgres-data:
   redis_data:
+  rabbitmq_data:

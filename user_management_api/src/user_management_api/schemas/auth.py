@@ -2,7 +2,7 @@
 Pydantic model used for user authentication, including sign-up and login.
 Provides validation are used for incoming and outgoing authentication data.
 """
-from typing import Self
+from typing import Self, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -52,26 +52,37 @@ class TokenResponse(BaseModel):
     refresh_token: str
 
 
-class PayLoadAccessToken(BaseModel):
+class PayloadTokenBase(BaseModel):
+    """
+    Schema for common token payload.
+    """
+    sub: str
+    exp: int
+    type: Literal["access", "refresh", "reset_password"]
+    jti: str
+
+
+class PayLoadAccessToken(PayloadTokenBase):
     """
     Schema for access token payload.
     """
-    sub: str
     group_id: int | None
     roles: list[str]
-    exp: int
-    type: str
-    jti: str
+    type: Literal["access"]
 
 
-class PayLoadRefreshToken(BaseModel):
+class PayLoadRefreshToken(PayloadTokenBase):
     """
     Schema for refresh token payload.
     """
-    sub: str
-    exp: int
-    type: str
-    jti: str
+    type: Literal["refresh"]
+
+
+class PayLoadResetPasswordToken(PayloadTokenBase):
+    """
+    Schema for reset token token payload.
+    """
+    type: Literal["reset_password"]
 
 
 class APIErrorResponse(BaseModel):
@@ -91,8 +102,23 @@ class APIErrorResponse(BaseModel):
 
 class CurrentUser(BaseModel):
     """
-    Schema
+    Schema for a user data from JWT access token.
     """
     user_id: str
     group_id: int | None
     roles: list[str]
+
+
+class ForgetPasswordRequest(BaseModel):
+    """
+    Schema for sending to get reset password token.
+    """
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """
+    Schema for updating user password.
+    """
+    token: str
+    new_password: str
