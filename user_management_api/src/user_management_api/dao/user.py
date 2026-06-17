@@ -40,6 +40,7 @@ class UserDAO(BaseDAO[User]):
 
         return user
 
+
     @classmethod
     async def find_one_or_none_with_related_data(cls, db: AsyncSession, where: Optional[ColumnElement[bool]]=None, **filters: Any) -> User | None:
         """

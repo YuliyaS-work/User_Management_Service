@@ -6,19 +6,21 @@ import logging
 import math
 from operator import and_
 from typing import Any, Sequence
+from uuid import UUID
 
 from fastapi import Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.user_management_api.core.config import settings, r
-from src.user_management_api.core.s3_client import delete_presigned_url_from_redis, delete_file, \
-    get_presigned_url_from_redis, save_presigned_url_to_redis, create_presigned_url, create_presigned_post, \
-    generate_image_s3_path
+from src.user_management_api.core.config import settings
+from src.user_management_api.storage_s3.s3_client import  delete_file, create_presigned_url, \
+    create_presigned_post, generate_image_s3_path
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.db.session import get_session
 from src.user_management_api.exceptions.auth import AuthenticationException
 from src.user_management_api.exceptions.user import AuthorizationError, ResourceNotFound, S3StorageError
 from src.user_management_api.models import User
+from src.user_management_api.redis.redis_s3 import delete_presigned_url_from_redis, get_presigned_url_from_redis, \
+    save_presigned_url_to_redis
 from src.user_management_api.schemas.auth import CurrentUser
 from src.user_management_api.schemas.user import ProfileUserPatch, PresignUrlGet, \
     PresignedPostResponse, ConfirmAvatarRequest, UserResponse, UserPatchByAdmin, UserFilter, UserPagination, \
@@ -31,7 +33,7 @@ from src.user_management_api.utils.auth import delete_tokens_from_cookies
 logger = logging.getLogger(__name__)
 
 
-def serialise_user_data(user: User | None) -> UserResponse:
+def serialize_user_data(user: User | None) -> UserResponse:
     if user is None:
         raise ResourceNotFound("User is not found")
 
@@ -74,7 +76,7 @@ async def get_me(
 
     logger.info("Success: getting serialized user data.")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def delete_me(
@@ -152,7 +154,7 @@ async def patch_me(
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)
 
     logger.info("Success: getting patched serialized user data")
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_avatar(
@@ -251,16 +253,16 @@ async def confirm_avatar(
     if user is None:
         raise ResourceNotFound("User is not found")
 
-    if user.image_s3_path:
-        await delete_file(bucket, user.image_s3_path)
-        await delete_presigned_url_from_redis(current_user.user_id)
-
     try:
         await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
         await db.commit()
     except:
         await db.rollback()
         raise ResourceNotFound("User is not found")
+
+    if user.image_s3_path:
+        await delete_file(bucket, user.image_s3_path)
+        await delete_presigned_url_from_redis(current_user.user_id)
 
     presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
     await save_presigned_url_to_redis(presigned_url, current_user.user_id)
@@ -269,7 +271,7 @@ async def confirm_avatar(
 
     logger.info("Success: user avatar path is saved into the DB")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def delete_avatar(
@@ -308,11 +310,11 @@ async def delete_avatar(
 
     logger.info("Success: user avatar was deleted")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_user(
-        user_id: str,
+        user_id: UUID,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
 ) -> UserResponse | None:
@@ -342,11 +344,11 @@ async def get_user(
 
     logger.info("Success: getting serialized user data")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def patch_user(
-        user_id: str,
+        user_id: UUID,
         data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
@@ -381,7 +383,7 @@ async def patch_user(
 
     logger.info("Success: getting patched serialized user data for ADMIN")
 
-    return serialise_user_data(user)
+    return serialize_user_data(user)
 
 
 async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
@@ -390,7 +392,7 @@ async def get_response_list(list_users: Sequence[User]) -> list[UserResponse]:
     """
     new_list: list[UserResponse] = []
     for user in list_users:
-        user_serialized = serialise_user_data(user)
+        user_serialized = serialize_user_data(user)
         new_list.append(user_serialized)
     return new_list
 

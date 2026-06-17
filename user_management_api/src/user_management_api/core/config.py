@@ -5,7 +5,7 @@ Defines global constants such as application name, debug mode,
 and database connection URL.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from redis.asyncio import Redis
+
 
 class Settings(BaseSettings):
     """Global application configuration settings."""
@@ -26,13 +26,6 @@ class Settings(BaseSettings):
 
     rabbitmq_url: str
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
-
-r = Redis(
-    host=settings.redis_host,
-    password=settings.redis_password,
-    port=settings.redis_port,
-    decode_responses=True
-    )

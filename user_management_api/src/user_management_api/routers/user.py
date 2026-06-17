@@ -3,6 +3,7 @@ User module providing routers for user information,
 including get, patch and delete operations.
 """
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi_filter import FilterDepends
@@ -167,7 +168,7 @@ async def delete_avatar_item(
 
 @user_router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def get_user_by_id(
-        user_id: str,
+        user_id: UUID,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
 ) -> UserResponse | None:
@@ -186,7 +187,7 @@ async def get_user_by_id(
 
 @user_router.patch("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def patch_user_by_id(
-        user_id: str,
+        user_id: UUID,
         data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)

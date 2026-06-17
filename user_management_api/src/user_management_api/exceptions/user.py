@@ -23,6 +23,10 @@ class AuthorizationError(APIException):
     status_code: int = 403
     detail: str = "Access is denied"
 
+
 class ResourceNotFound(APIException):
+    """
+    Raised when resource doesn't exist.
+    """
     status_code: int = 404
     detail: str = "Resource is not found"
