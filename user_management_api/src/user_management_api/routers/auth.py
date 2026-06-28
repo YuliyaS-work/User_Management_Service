@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.db.session import get_session
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, ResetPasswordRequest, \
-    ForgetPasswordRequest
+    ForgetPasswordRequest, CurrentUser
 from src.user_management_api.services.auth import register_user, login_user, logout_user, renew_tokens, reset_password, \
-    save_password
+    save_password, validate_incoming_token
 
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -120,3 +120,19 @@ async def save_password_item(
         dict[str,str]: Confirm a message about the password update result.
     """
     return await save_password(data, db)
+
+
+@auth_router.get("/validate-token")
+def validate_incoming_token_item(
+        request: Request
+) -> CurrentUser:
+    """
+    Send a user information to Innoter Service from incoming access token.
+
+    Args:
+        request (Request): request of Innoter Service to validate token.
+
+    Returns:
+        CurrentUser: user data for Innoter Service.
+    """
+    return validate_incoming_token(request)
