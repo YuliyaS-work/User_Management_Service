@@ -314,7 +314,7 @@ async def delete_avatar(
 
 
 async def get_user(
-        user_id: UUID,
+        user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
 ) -> UserResponse | None:
@@ -348,7 +348,7 @@ async def get_user(
 
 
 async def patch_user(
-        user_id: UUID,
+        user_id: str,
         data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
@@ -374,8 +374,9 @@ async def patch_user(
             if roles_id is not None:
                 await UserDAO.update_user_role(db, user_id, roles_id)
             await db.commit()
-        except:
+        except Exception as e:
             await db.rollback()
+            logger.error(f"str({e})")
             raise ResourceNotFound("User is not found")
         user = await UserDAO.find_one_or_none_with_related_data(db, User.id == user_id)
     else:

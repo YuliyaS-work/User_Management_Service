@@ -168,7 +168,7 @@ async def delete_avatar_item(
 
 @user_router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def get_user_by_id(
-        user_id: UUID,
+        user_id: str,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
 ) -> UserResponse | None:
@@ -187,7 +187,7 @@ async def get_user_by_id(
 
 @user_router.patch("/{user_id}", response_model=UserResponse, dependencies=[Depends(cookie_schema)])
 async def patch_user_by_id(
-        user_id: UUID,
+        user_id: str,
         data: UserPatchByAdmin,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user)
