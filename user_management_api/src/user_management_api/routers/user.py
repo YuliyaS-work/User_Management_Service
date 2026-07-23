@@ -5,7 +5,7 @@ including get, patch and delete operations.
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, BackgroundTasks
 from fastapi_filter import FilterDepends
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import APIKeyCookie
@@ -46,6 +46,7 @@ async def get_me_item(
 async def delete_me_item(
         request: Request,
         response: Response,
+        background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
@@ -56,13 +57,14 @@ async def delete_me_item(
     Args:
         request (Request): Get an access token from cookies.
         response (Response):  Delete JWT tokens from cookie.
+        background_tasks (BackgroundTasks): Schedules publishing the message asynchronously.
         db (AsyncSession): Database session.
         current_user (CurrentUser) : A user ID from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
     Returns:
         dict: The message about deletion of a user.
     """
-    return await delete_me(request, response, db, current_user, bucket)
+    return await delete_me(request, response, background_tasks, db, current_user, bucket)
 
 
 @user_router.patch("/me", response_model=UserResponse, dependencies=[Depends(cookie_schema)])

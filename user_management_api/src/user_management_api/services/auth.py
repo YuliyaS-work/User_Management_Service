@@ -19,7 +19,7 @@ from src.user_management_api.core.security import get_password_hash, create_acce
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
 from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
-from src.user_management_api.rabbitmq.publisher import publish_message
+from src.user_management_api.rabbitmq.publisher import safe_publish
 from src.user_management_api.redis.auth import save_refresh_token_to_redis, delete_refresh_token_from_redis
 
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser, \
@@ -280,9 +280,11 @@ async def reset_password(
 
     # Publish a reset-password message to RabbitMQ asynchronously.
     background_tasks.add_task(
-        publish_message,
+        safe_publish,
         request.app,
-        json.dumps(message)
+        json.dumps(message),
+        "reset-password-stream",
+        headers={"x-retry-count": 0}
     )
     logger.info(f"Success: message sent to RabbitMQ for user email={data.email}.")
 
