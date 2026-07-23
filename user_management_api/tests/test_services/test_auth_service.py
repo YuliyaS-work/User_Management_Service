@@ -7,10 +7,10 @@ from sqlalchemy import BinaryExpression, BooleanClauseList
 
 from src.user_management_api.exceptions.auth import AuthenticationException, ConflictException, APIException
 from src.user_management_api.exceptions.user import ResourceNotFound
-from src.user_management_api.schemas.auth import UserLogin, ForgetPasswordRequest, ResetPasswordRequest
+from src.user_management_api.schemas.auth import UserLogin, ForgetPasswordRequest
 from src.user_management_api.services.auth import get_current_user, create_and_store_tokens, verify_refresh_token, \
     register_user, login_user, logout_user, renew_tokens, reset_password, save_password
-from tests.conftest import fake_background_tasks, FakeRequest
+from tests.conftest import  FakeRequest
 
 
 # Tests for get_current_user()
@@ -300,7 +300,7 @@ async def test_register_user_email_conflict(
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
-async def test_register_user_username_conflict(
+async def test_register_user_phonenumber_conflict(
         mock_find_user,
         mock_db,
         fake_response,

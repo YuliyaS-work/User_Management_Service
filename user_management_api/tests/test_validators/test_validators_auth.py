@@ -41,7 +41,7 @@ def test_validate_phone_number_signup_phonenumber_None():
     validate_phone_number_signup() should return None when value is None.
     """
     # Act/Assert
-    assert validate_phone_number_signup(None) == None
+    assert validate_phone_number_signup(None) is None
 
 
 def test_validate_phone_number_signup_empty_phonenumber():
@@ -49,7 +49,7 @@ def test_validate_phone_number_signup_empty_phonenumber():
     validate_phone_number_signup() should return None when value is an empty string.
     """
     # Act/Assert
-    assert validate_phone_number_signup("") == None
+    assert validate_phone_number_signup("") is None
 
 
 @patch("src.user_management_api.validators.auth.phonenumbers.format_number")

@@ -45,7 +45,7 @@ async def get_presigned_url_from_redis(user_id: str) ->str | None:
     try:
         presigned_url: str | None = await r.get(f"presigned_url:{user_id}")
 
-        logger.info(f"Success: available presigned url avatar was fetched from redis")
+        logger.info("Success: available presigned url avatar was fetched from redis")
         return presigned_url
     except Exception as e:
         logger.warning(f"Redis error: {e}")

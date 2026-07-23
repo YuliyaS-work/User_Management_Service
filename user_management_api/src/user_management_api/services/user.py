@@ -5,11 +5,9 @@ including  operations.
 import json
 import logging
 import math
-import uuid
 from datetime import datetime, timezone
 from operator import and_
 from typing import Any, Sequence
-from uuid import UUID
 
 from fastapi import Depends, Request, Response, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,7 +141,7 @@ async def delete_me(
             "delete-user-data",
             headers=None
         )
-        logger.info(f"Success: message sent to RabbitMQ for deletion user data.")
+        logger.info("Success: message sent to RabbitMQ for deletion user data.")
 
         return {"detail": "A user profile was deleted."}
     else:
@@ -169,7 +167,7 @@ async def patch_me(
         logger.info(f"Start: patch user data by ID={current_user.user_id}")
         await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
         await db.commit()
-    except:
+    except Exception:
         await db.rollback()
         raise ResourceNotFound("User is not found")
 
@@ -278,7 +276,7 @@ async def confirm_avatar(
     try:
         await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
         await db.commit()
-    except:
+    except Exception:
         await db.rollback()
         raise ResourceNotFound("User is not found")
 
@@ -322,7 +320,7 @@ async def delete_avatar(
         try:
             await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
             await db.commit()
-        except:
+        except Exception:
             await db.rollback()
             raise ResourceNotFound("User is not found")
         await delete_file(bucket, user.image_s3_path)
@@ -437,7 +435,7 @@ async def get_users(
     Returns:
         dict : Data for each role of current user.
     """
-    logger.info(f"Start: fetch users list for ADMIN/MODERATOR role.")
+    logger.info("Start: fetch users list for ADMIN/MODERATOR role.")
 
     response = {}
     roles = {
@@ -447,7 +445,7 @@ async def get_users(
 
     for role, role_condition in roles.items():
         # Check allowed role.
-        if not role in current_user.roles:
+        if role not in current_user.roles:
             continue
 
         # Get data from database.
@@ -467,6 +465,6 @@ async def get_users(
     if response == {}:
         raise AuthorizationError("Not allowed")
 
-    logger.info(f"Success: getting serialized users list data.")
+    logger.info("Success: getting serialized users list data.")
 
     return response

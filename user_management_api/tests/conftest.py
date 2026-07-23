@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 from freezegun import freeze_time
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from src.user_management_api.models import User, Group
 from src.user_management_api.schemas.auth import UserRegister, ResetPasswordRequest

@@ -1,4 +1,4 @@
-from fastapi import Response, Request, Header
+from fastapi import Response, Request
 
 from src.user_management_api.exceptions.auth import AuthenticationException
 

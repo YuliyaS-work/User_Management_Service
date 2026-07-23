@@ -67,7 +67,7 @@ async def test_user_add_failed(
 
     # Act
     with pytest.raises(RuntimeError) as e:
-        result = await UserDAO.add(mock_db, **user_register_data.model_dump())
+        await UserDAO.add(mock_db, **user_register_data.model_dump())
 
     # Assert
     assert str(e.value) == "Default USER role is missing in the database."

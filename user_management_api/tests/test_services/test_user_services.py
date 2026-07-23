@@ -254,7 +254,7 @@ async def test_patch_me_user_not_found(
 
     # Act
     with pytest.raises(ResourceNotFound) as e:
-        result = await patch_me(data, mock_db, current_user)
+        await patch_me(data, mock_db, current_user)
 
     # Assert
     assert e.value.detail == "User is not found"
@@ -770,7 +770,7 @@ async def test_patch_user_patch_failed(
     """
     # Arrange
     role_1 = MagicMock(id = 1, role_name = StatusRole.USER)
-    role_2 = MagicMock(id = 2, role_name = StatusRole.MODERATOR)
+
     user = mock_user_data()
     user.roles = [role_1]
     data = MagicMock()

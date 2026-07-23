@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 from jose import jwt, JWTError
 

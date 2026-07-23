@@ -3,7 +3,6 @@ User module providing routers for user information,
 including get, patch and delete operations.
 """
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, BackgroundTasks
 from fastapi_filter import FilterDepends
