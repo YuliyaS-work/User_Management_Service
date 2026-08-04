@@ -19,7 +19,7 @@ pipeline {
         stage('Lint/Format') {
             steps {
                 dir('user_management_api'){
-                    ssh 'poetry run ruff format .'
+                    sh 'poetry run ruff format .'
                     sh 'poetry run ruff check .'
                 }
             }
