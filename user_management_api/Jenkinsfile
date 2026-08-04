@@ -19,8 +19,8 @@ pipeline {
         stage('Lint/Format') {
             steps {
                 dir('user_management_api'){
-                    sh 'poetry run black .'
-                    sh 'poetry run flake8 .'
+                    ssh 'poetry run ruff format .'
+                    sh 'poetry run ruff check .'
                 }
             }
         }
@@ -28,7 +28,8 @@ pipeline {
         stage('Tests') {
             steps {
                 dir('user_management_api'){
-                    sh 'poetry run pytest --cov=.'
+                    sh 'poetry run coverage run -m pytest'
+                    sh 'poetry run coverage report'
                 }
             }
         }
@@ -51,14 +52,14 @@ pipeline {
                 }
             }
         }
-
-        stage('Deploy to minikube') {
-            steps {
-                dir('user_management_api'){
-                    sh 'kubectl apply -f ../infrastructure/k8s/ums-deployment.yaml'
-                    sh 'kubectl rollout restart deployment ums -n app'
-                }
-            }
-        }
+//
+//         stage('Deploy to minikube') {
+//             steps {
+//                 dir('user_management_api'){
+//                     sh 'kubectl apply -f ../infrastructure/k8s/ums-deployment.yaml'
+//                     sh 'kubectl rollout restart deployment ums -n app'
+//                 }
+//             }
+//         }
     }
 }
