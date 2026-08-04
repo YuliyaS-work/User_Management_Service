@@ -1,31 +1,30 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.13'
-            args '-u root'
-        }
-    }
-    stages('Python CI (Install, Lint, Tests)') {
 
-        stage('Install Poetry') {
+    agent any
+
+    stages {
+
+        stage('Python CI (Install, Lint, Tests)') {
+            agent {
+                docker {
+                    image 'python:3.13'
+                    args '-u root'
+                }
+            }
             steps {
                 dir('user_management_api'){
                     sh 'pip install poetry'
                     sh 'poetry install'
                 }
             }
-        }
 
-        stage('Lint/Format') {
             steps {
                 dir('user_management_api'){
                     sh 'poetry run ruff format .'
                     sh 'poetry run ruff check .'
                 }
             }
-        }
 
-        stage('Tests') {
             steps {
                 dir('user_management_api'){
                     withEnv([
