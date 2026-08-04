@@ -1,13 +1,6 @@
 pipeline {
     agent any
 
-    stages {
-        stage('Checkout') {
-            steps {
-                git 'https://github.com/YuliyaS-work/User_Management_Service.git'
-            }
-        }
-
         stage('Install Poetry') {
             steps {
                 sh 'pip install poetry'
