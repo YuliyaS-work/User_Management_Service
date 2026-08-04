@@ -28,8 +28,22 @@ pipeline {
         stage('Tests') {
             steps {
                 dir('user_management_api'){
-                    sh 'poetry run coverage run -m pytest'
-                    sh 'poetry run coverage report'
+                    withEnv([
+                        'DATABASE_URL=sqlite+aiosqlite:///./test.db',
+                        'SECRET_KEY=test',
+                        'ALGORITHM=HS256',
+                        'REDIS_HOST=localhost',
+                        'REDIS_PORT=6379',
+                        'REDIS_PASSWORD=test',
+                        'AWS_ACCESS_KEY_ID=test',
+                        'AWS_SECRET_ACCESS_KEY=test',
+                        'AWS_REGION=us-east-1',
+                        'BUCKET_NAME=test',
+                        'RABBITMQ_URL=amqp://guest:guest@localhost/'
+                    ]) {
+                        sh 'poetry run coverage run -m pytest'
+                        sh 'poetry run coverage report'
+                    }
                 }
             }
         }
