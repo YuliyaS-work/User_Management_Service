@@ -16,16 +16,12 @@ pipeline {
                     sh 'pip install poetry'
                     sh 'poetry install'
                 }
-            }
 
-            steps {
                 dir('user_management_api'){
                     sh 'poetry run ruff format .'
                     sh 'poetry run ruff check .'
                 }
-            }
 
-            steps {
                 dir('user_management_api'){
                     withEnv([
                         'DATABASE_URL=sqlite+aiosqlite:///./test.db',
