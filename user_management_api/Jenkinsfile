@@ -46,7 +46,7 @@ pipeline {
         stage('Build Docker') {
             steps {
                 dir('user_management_api'){
-                    sh 'docker build -t ums-1/ums:latest .'
+                    sh 'docker build -t yuliyaswork/ums:latest .'
                 }
             }
         }
@@ -56,7 +56,7 @@ pipeline {
                 dir('user_management_api'){
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                         sh 'docker login -u $DOCKER_USER -p $DOCKER_PASS'
-                        sh 'docker push ums-1/ums:latest'
+                        sh 'docker push yuliyaswork/ums:latest'
                     }
                 }
             }
