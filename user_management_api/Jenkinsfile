@@ -1,6 +1,10 @@
 pipeline {
-    agent any
-
+    agent {
+        docker {
+            image 'python:3.13'
+            args '-u root'
+        }
+    }
     stages {
 
         stage('Install Poetry') {
