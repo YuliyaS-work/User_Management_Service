@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/YuliyaS-work/User_Management_Service.git'
+            }
+        }
+
+        stage('Install Poetry') {
+            steps {
+                sh 'pip install poetry'
+                sh 'poetry install'
+            }
+        }
+
+        stage('Lint/Format') {
+            steps {
+                sh 'poetry run black .'
+                sh 'poetry run flake8 .'
+            }
+        }
+
+       stage('Tests') {
+            steps {
+                sh 'poetry run pytest --cov=.'
+            }
+        }
+
+        stage('Build Docker') {
+            steps {
+                sh 'docker build -t ums-1/ums:latest .'
+            }
+        }
+
+        stage('Push Docker') {
+            steps {
+                sh 'docker login -u $DOCKER_USER -p $DOCKER_PASS'
+                sh 'docker push ums-1/ums:latest'
+            }
+        }
+
+        stage('Deploy to minikube') {
+            steps {
+                sh 'kubectl apply -f ../infrastructure/k8s/ums-deployment.yaml'
+                sh 'kubectl rollout restart deployment ums -n app'
+            }
+        }
+    }
+}
