@@ -69,8 +69,8 @@ pipeline {
                 }
 
                 withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
-                    sh 'kubectl apply -f k8s/ums/ums-service.yaml'
+                    sh 'kubectl apply -f infra/k8s/ums/ums-deployment.yaml'
+                    sh 'kubectl apply -f infra/k8s/ums/ums-service.yaml'
                     sh 'kubectl rollout restart deployment ums -n app'
 
                     sh 'kubectl rollout status deployment ums -n app --timeout=60s'
