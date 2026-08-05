@@ -66,13 +66,10 @@ pipeline {
             steps {
                 git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
 
-                withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-
-                    withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
-                        sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
-                        sh 'kubectl apply -f k8s/ums/ums-service.yaml'
-                        sh 'kubectl rollout restart deployment ums -n app'
-                    }
+                withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
+                    sh 'kubectl apply -f k8s/ums/ums-service.yaml'
+                    sh 'kubectl rollout restart deployment ums -n app'
                 }
             }
         }
