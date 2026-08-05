@@ -55,7 +55,7 @@ pipeline {
             steps {
                 dir('user_management_api'){
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                        sh 'docker login -u $DOCKER_USER -p $DOCKER_PASS'
+                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                         sh 'docker push yuliyaswork/ums:latest'
                     }
                 }
@@ -66,10 +66,14 @@ pipeline {
             steps {
                 git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
 
-                sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
-                sh 'kubectl apply -f k8s/ums/ums-service.yaml'
+                withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
 
-                sh 'kubectl rollout restart deployment ums -n app'
+                    withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
+                        sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
+                        sh 'kubectl apply -f k8s/ums/ums-service.yaml'
+                        sh 'kubectl rollout restart deployment ums -n app'
+                    }
+                }
             }
         }
     }
