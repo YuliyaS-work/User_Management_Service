@@ -8,6 +8,7 @@ spec:
   containers:
   - name: python
     image: python:3.13
+    imagePullPolicy: IfNotPresent
     command: ['sh', '-c', 'sleep 3600']
     workingDir: /home/jenkins/agent
     securityContext:
@@ -15,6 +16,7 @@ spec:
     tty: true
   - name: docker
     image: docker:dind
+    imagePullPolicy: IfNotPresent
     securityContext:
       privileged: true
     volumeMounts:
@@ -22,6 +24,7 @@ spec:
       mountPath: /var/lib/docker
   - name: kubectl
     image: bitnami/kubectl:latest
+    imagePullPolicy: IfNotPresent
     command: ['sh', '-c', 'sleep 3600']
     workingDir: /home/jenkins/agent
     securityContext:
@@ -42,8 +45,8 @@ spec:
                     dir('user_management_api'){
                         sh '''
                             pip install --no-cache-dir poetry
-                            poetry install
-                            poetry run ruff format .
+                            poetry install --no-root
+                            poetry run ruff format --check .
                             poetry run ruff check .
                         '''
                         withEnv([
@@ -74,11 +77,12 @@ spec:
                 container('docker') {
                     dir('user_management_api'){
                         withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                            sh 'dockerd-entrypoint.sh &'
-                            sh 'sleep 5'
-                            sh 'docker build -t yuliyaswork/ums:latest .'
-                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                            sh 'docker push yuliyaswork/ums:latest'
+                            sh '''
+                                docker info >/dev/null 2>&1 || (dockerd-entrypoint.sh & sleep 5)
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                docker build -t yuliyaswork/ums:latest .
+                                docker push yuliyaswork/ums:latest
+                            '''
                         }
                     }
                 }
@@ -88,14 +92,17 @@ spec:
         stage('Deploy to Minikube') {
             steps {
                 container('kubectl') {
-                    dir('infra') {
+                    dir('infra-repo') {
                         git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
+
+                        sh '''
+                            kubectl apply -f k8s/namespace.yaml
+                            kubectl apply -f k8s/ums/ums-deployment.yaml --validate=false
+                            kubectl apply -f k8s/ums/ums-service.yaml --validate=false
+                            kubectl rollout restart deployment ums -n app
+                            kubectl rollout status deployment ums -n app --timeout=60s
+                        '''
                     }
-                    sh 'kubectl apply -f infra/k8s/namespace.yaml'
-                    sh 'kubectl apply -f infra/k8s/ums/ums-deployment.yaml --validate=false'
-                    sh 'kubectl apply -f infra/k8s/ums/ums-service.yaml --validate=false'
-                    sh 'kubectl rollout restart deployment ums -n app'
-                    sh 'kubectl rollout status deployment ums -n app --timeout=60s'
                 }
             }
         }
