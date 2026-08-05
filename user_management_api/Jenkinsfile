@@ -94,7 +94,10 @@ spec:
 
                         sh '''
                             kubectl apply -f k8s/namespace.yaml
+
                             kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
+                            kubectl rollout status deployment rabbitmq -n app --timeout=90s
+
                             kubectl apply -f k8s/ums/ --validate=false
                             kubectl rollout restart deployment ums -n app
                             kubectl rollout status deployment ums -n app --timeout=60s
