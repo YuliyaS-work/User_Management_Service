@@ -10,6 +10,8 @@ spec:
     image: python:3.13
     command: ['sh', '-c', 'sleep 3600']
     workingDir: /home/jenkins/agent
+    securityContext:
+      runAsUser: 0
     tty: true
   - name: docker
     image: docker:dind
@@ -22,6 +24,8 @@ spec:
     image: bitnami/kubectl:latest
     command: ['sh', '-c', 'sleep 3600']
     workingDir: /home/jenkins/agent
+    securityContext:
+      runAsUser: 0
     tty: true
   volumes:
   - name: dind-storage
@@ -36,10 +40,12 @@ spec:
             steps {
                 container('python') {
                     dir('user_management_api'){
-                        sh 'pip install poetry'
-                        sh 'poetry install'
-                        sh 'poetry run ruff format .'
-                        sh 'poetry run ruff check .'
+                        sh '''
+                            pip install --no-cache-dir poetry
+                            poetry install
+                            poetry run ruff format .
+                            poetry run ruff check .
+                        '''
                         withEnv([
                             'DATABASE_URL=sqlite+aiosqlite:///./test.db',
                             'SECRET_KEY=test',
@@ -53,8 +59,10 @@ spec:
                             'BUCKET_NAME=test',
                             'RABBITMQ_URL=amqp://guest:guest@localhost/'
                         ]) {
-                            sh 'poetry run coverage run -m pytest'
-                            sh 'poetry run coverage report'
+                            sh '''
+                                poetry run coverage run -m pytest
+                                poetry run coverage report
+                            '''
                         }
                     }
                 }
