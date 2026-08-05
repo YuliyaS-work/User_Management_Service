@@ -8,7 +8,8 @@ spec:
   containers:
   - name: python
     image: python:3.13
-    command: ['cat']
+    command: ['sh', '-c', 'sleep 3600']
+    workingDir: /home/jenkins/agent
     tty: true
   - name: docker
     image: docker:dind
@@ -19,7 +20,8 @@ spec:
       mountPath: /var/lib/docker
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ['cat']
+    command: ['sh', '-c', 'sleep 3600']
+    workingDir: /home/jenkins/agent
     tty: true
   volumes:
   - name: dind-storage
