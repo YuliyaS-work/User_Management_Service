@@ -1,62 +1,75 @@
 pipeline {
-
-    agent any
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: python
+    image: python:3.13
+    command: ['cat']
+    tty: true
+  - name: docker
+    image: docker:dind
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: dind-storage
+      mountPath: /var/lib/docker
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ['cat']
+    tty: true
+  volumes:
+  - name: dind-storage
+    emptyDir: {}
+'''
+        }
+    }
 
     stages {
 
         stage('Python CI (Install, Lint, Tests)') {
-            agent {
-                docker {
-                    image 'python:3.13'
-                    args '-u root'
-                }
-            }
             steps {
-                dir('user_management_api'){
-                    sh 'pip install poetry'
-                    sh 'poetry install'
-                }
-
-                dir('user_management_api'){
-                    sh 'poetry run ruff format .'
-                    sh 'poetry run ruff check .'
-                }
-
-                dir('user_management_api'){
-                    withEnv([
-                        'DATABASE_URL=sqlite+aiosqlite:///./test.db',
-                        'SECRET_KEY=test',
-                        'ALGORITHM=HS256',
-                        'REDIS_HOST=localhost',
-                        'REDIS_PORT=6379',
-                        'REDIS_PASSWORD=test',
-                        'AWS_ACCESS_KEY_ID=test',
-                        'AWS_SECRET_ACCESS_KEY=test',
-                        'AWS_REGION=us-east-1',
-                        'BUCKET_NAME=test',
-                        'RABBITMQ_URL=amqp://guest:guest@localhost/'
-                    ]) {
-                        sh 'poetry run coverage run -m pytest'
-                        sh 'poetry run coverage report'
+                container('python') {
+                    dir('user_management_api'){
+                        sh 'pip install poetry'
+                        sh 'poetry install'
+                        sh 'poetry run ruff format .'
+                        sh 'poetry run ruff check .'
+                        withEnv([
+                            'DATABASE_URL=sqlite+aiosqlite:///./test.db',
+                            'SECRET_KEY=test',
+                            'ALGORITHM=HS256',
+                            'REDIS_HOST=localhost',
+                            'REDIS_PORT=6379',
+                            'REDIS_PASSWORD=test',
+                            'AWS_ACCESS_KEY_ID=test',
+                            'AWS_SECRET_ACCESS_KEY=test',
+                            'AWS_REGION=us-east-1',
+                            'BUCKET_NAME=test',
+                            'RABBITMQ_URL=amqp://guest:guest@localhost/'
+                        ]) {
+                            sh 'poetry run coverage run -m pytest'
+                            sh 'poetry run coverage report'
+                        }
                     }
                 }
             }
         }
 
-        stage('Build Docker') {
+        stage('Build & Push Docker') {
             steps {
-                dir('user_management_api'){
-                    sh 'docker build -t yuliyaswork/ums:latest .'
-                }
-            }
-        }
-
-        stage('Push Docker') {
-            steps {
-                dir('user_management_api'){
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                        sh 'docker push yuliyaswork/ums:latest'
+                container('docker') {
+                    dir('user_management_api'){
+                        withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                            sh 'dockerd-entrypoint.sh &'
+                            sh 'sleep 5'
+                            sh 'docker build -t yuliyaswork/ums:latest .'
+                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                            sh 'docker push yuliyaswork/ums:latest'
+                        }
                     }
                 }
             }
@@ -64,15 +77,14 @@ pipeline {
 
         stage('Deploy to Minikube') {
             steps {
-                dir('infra') {
-                    git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
-                }
-
-                withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG')]) {
+                container('kubectl') {
+                    dir('infra') {
+                        git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
+                    }
+                    sh 'kubectl apply -f infra/k8s/namespace.yaml'
                     sh 'kubectl apply -f infra/k8s/ums/ums-deployment.yaml --validate=false'
                     sh 'kubectl apply -f infra/k8s/ums/ums-service.yaml --validate=false'
                     sh 'kubectl rollout restart deployment ums -n app'
-
                     sh 'kubectl rollout status deployment ums -n app --timeout=60s'
                 }
             }
