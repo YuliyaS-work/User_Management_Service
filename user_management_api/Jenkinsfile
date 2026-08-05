@@ -64,7 +64,7 @@ pipeline {
 
         stage('Deploy to Minikube') {
             steps {
-                git branch: 'feature/k8s', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
+                git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
 
                 sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
                 sh 'kubectl apply -f k8s/ums/ums-service.yaml'
