@@ -16,6 +16,8 @@ COPY pyproject.toml poetry.lock ./
 
 ENV POETRY_VIRTUALENVS_CREATE=false
 
+RUN pip install --no-cache-dir --upgrade pip setuptools attrs
+
 RUN poetry install --no-interaction --no-root --without dev
 
 COPY . .
