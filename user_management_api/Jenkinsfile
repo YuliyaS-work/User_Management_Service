@@ -61,14 +61,16 @@ pipeline {
                 }
             }
         }
-//
-//         stage('Deploy to minikube') {
-//             steps {
-//                 dir('user_management_api'){
-//                     sh 'kubectl apply -f ../infrastructure/k8s/ums-deployment.yaml'
-//                     sh 'kubectl rollout restart deployment ums -n app'
-//                 }
-//             }
-//         }
+
+        stage('Deploy to Minikube') {
+            steps {
+                git branch: 'feature/k8s', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
+
+                sh 'kubectl apply -f k8s/ums/ums-deployment.yaml'
+                sh 'kubectl apply -f k8s/ums/ums-service.yaml'
+
+                sh 'kubectl rollout restart deployment ums -n app'
+            }
+        }
     }
 }
