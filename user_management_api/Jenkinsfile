@@ -79,10 +79,7 @@ spec:
             steps {
                 container('build-tools') {
                     dir('user_management_api') {
-                        sh '''
-                            docker build -t yuliyaswork/ums:latest .
-                            minikube image load yuliyaswork/ums:latest
-                        '''
+                        sh 'docker build -t yuliyaswork/ums:latest .'
                     }
                 }
             }
@@ -95,6 +92,8 @@ spec:
                         git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
 
                         sh '''
+                            minikube image load yuliyaswork/ums:latest
+
                             kubectl apply -f k8s/namespace.yaml
 
                             kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
