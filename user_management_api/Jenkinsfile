@@ -75,15 +75,32 @@ spec:
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Docker') {
             steps {
                 container('build-tools') {
-                    dir('user_management_api') {
+                    dir('user_management_api'){
                         sh 'docker build -t yuliyaswork/ums:latest .'
                     }
                 }
             }
         }
+
+        stage('Push Docker') {
+            steps {
+                container('build-tools') {
+                    dir('user_management_api'){
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+
+                            sh '''
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                docker push yuliyaswork/ums:latest
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
 
         stage('Deploy to Minikube') {
             steps {
@@ -92,8 +109,6 @@ spec:
                         git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
 
                         sh '''
-                            minikube image load yuliyaswork/ums:latest
-
                             kubectl apply -f k8s/namespace.yaml
 
                             kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
@@ -103,7 +118,7 @@ spec:
                             kubectl apply -f k8s/ingress.yaml --validate=false
 
                             kubectl rollout restart deployment ums -n app
-                            kubectl rollout status deployment ums -n app --timeout=60s
+                            kubectl rollout status deployment ums -n app --timeout=120s
                         '''
                     }
                 }
