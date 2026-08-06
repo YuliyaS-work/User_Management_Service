@@ -79,8 +79,10 @@ spec:
             steps {
                 container('build-tools') {
                     dir('user_management_api') {
-
-                        sh 'docker build -t yuliyaswork/ums:latest .'
+                        sh '''
+                            docker build -t yuliyaswork/ums:latest .
+                            minikube image load yuliyaswork/ums:latest
+                        '''
                     }
                 }
             }
