@@ -23,11 +23,7 @@ async def lifespan(app: FastAPI):
             yield
 
 app = FastAPI(
-    lifespan=lifespan,
-    title="UMS Service",
-    root_path="/ums",
-    docs_url="/docs",
-    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 app.include_router(health_router)
