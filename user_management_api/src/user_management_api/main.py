@@ -24,11 +24,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
+    root_path="/ums",
     docs_url="/ums/docs",
     openapi_url="/ums/openapi.json"
 )
 
-router = APIRouter(prefix="/ums")
 
 app.include_router(health_router)
 app.include_router(auth_router)
