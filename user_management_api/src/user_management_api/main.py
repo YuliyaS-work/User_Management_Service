@@ -5,7 +5,7 @@ Initializes the FastAPI app and registers all API routers.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
 
 from src.user_management_api.core.exception_handlers import api_exception_handler
 from src.user_management_api.core.logging_config import logging_lifespan
