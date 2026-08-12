@@ -5,7 +5,7 @@ Initializes the FastAPI app and registers all API routers.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 
 from src.user_management_api.core.exception_handlers import api_exception_handler
 from src.user_management_api.core.logging_config import logging_lifespan
@@ -24,8 +24,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    root_path="/ums"
+    docs_url="/ums/docs",
+    openapi_url="/ums/openapi.json"
 )
+
+router = APIRouter(prefix="/ums")
 
 app.include_router(health_router)
 app.include_router(auth_router)

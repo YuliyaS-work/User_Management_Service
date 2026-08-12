@@ -112,11 +112,13 @@ spec:
                             kubectl apply -f k8s/namespace.yaml
 
                             kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
-                            kubectl rollout status deployment rabbitmq -n app --timeout=90s
+                            kubectl rollout status statefulset rabbitmq -n app --timeout=90s
                             kubectl apply -f k8s/shared/redis.yaml --validate=false
-                            kubectl rollout status deployment redis -n app --timeout=90s
+                            kubectl rollout status statefulset redis -n app --timeout=90s
 
                             kubectl apply -f k8s/ums/ --validate=false
+
+                            kubectl rollout status statefulset ums-postgres -n app --timeout=120s
 
                             kubectl apply -f k8s/ingress.yaml --validate=false
 
