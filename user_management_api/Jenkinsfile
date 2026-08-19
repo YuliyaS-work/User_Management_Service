@@ -113,8 +113,13 @@ spec:
 
                             kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
                             kubectl rollout status statefulset rabbitmq -n app --timeout=90s
+
                             kubectl apply -f k8s/shared/redis.yaml --validate=false
                             kubectl rollout status statefulset redis -n app --timeout=90s
+
+                            kubectl apply -f k8s/shared/localstack.yaml --validate=false
+                            kubectl rollout status deployment localstack -n app --timeout=90s
+
 
                             kubectl apply -f k8s/ums/ --validate=false
 
