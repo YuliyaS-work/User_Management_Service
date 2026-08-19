@@ -117,10 +117,6 @@ spec:
                             kubectl apply -f k8s/shared/redis.yaml --validate=false
                             kubectl rollout status statefulset redis -n app --timeout=90s
 
-                            kubectl apply -f k8s/shared/localstack.yaml --validate=false
-                            kubectl rollout status deployment localstack -n app --timeout=90s
-
-
                             kubectl apply -f k8s/ums/ --validate=false
 
                             kubectl rollout status statefulset ums-postgres -n app --timeout=120s
