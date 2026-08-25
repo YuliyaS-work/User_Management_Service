@@ -6,7 +6,9 @@ Initializes the FastAPI app and registers all API routers.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from src.user_management_api.core.config import settings
 from src.user_management_api.core.exception_handlers import api_exception_handler
 from src.user_management_api.core.logging_config import logging_lifespan
 from src.user_management_api.exceptions.auth import APIException
@@ -28,7 +30,16 @@ app = FastAPI(
     docs_url="/docs",
     openapi_url="/openapi.json"
 )
+cors_origins_str = settings.cors_allowed_origins
+origins_list = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(health_router)
 app.include_router(auth_router)

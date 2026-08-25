@@ -69,6 +69,7 @@ services:
         - AWS_REGION=${AWS_REGION}
         - BUCKET_NAME=${BUCKET_NAME}
         - RABBITMQ_URL=${RABBITMQ_URL}
+        - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
       depends_on:
         db_ums:
           condition: service_healthy
