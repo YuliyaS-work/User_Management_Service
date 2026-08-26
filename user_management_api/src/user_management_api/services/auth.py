@@ -13,6 +13,7 @@ from phonenumbers.phonenumberutil import NumberParseException
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.user_management_api.core.config import settings
 from src.user_management_api.core.security import get_password_hash, create_access_token, create_refresh_token, \
     verify_password, decode_token, validate_refresh_token, get_token_hash, validate_access_token, \
     create_reset_password_token, validate_reset_password_token
@@ -267,7 +268,7 @@ async def reset_password(
     token = create_reset_password_token(data.email)
 
     # Create a link to reset a password.
-    reset_link = f"{request.base_url}reset-password?token={token}"
+    reset_link = f"{settings.frontend_url}/reset-password?token={token}"
 
     # Create an email message for publishing.
     message = {

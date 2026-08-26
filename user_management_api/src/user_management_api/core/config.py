@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str
     algorithm: str
+    is_production: bool
 
     redis_host: str
     redis_port: int
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     rabbitmq_url: str
 
     cors_allowed_origins: str
+    frontend_url: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,5 +1,6 @@
 from fastapi import Response, Request
 
+from src.user_management_api.core.config import settings
 from src.user_management_api.exceptions.auth import AuthenticationException
 
 
@@ -41,7 +42,7 @@ def send_tokens_to_user(response: Response, access_token: str, refresh_token: st
         value=refresh_token,
         path="/",
         httponly=True,
-        secure=True,
+        secure=settings.is_production,
         samesite="lax",
         max_age=30*24*60*60
     )
@@ -55,13 +56,13 @@ def delete_tokens_from_cookies(response: Response) -> None:
         key="access_token",
         path="/",
         httponly=True,
-        secure=True,
+        secure=settings.is_production,
         samesite="lax"
     )
     response.delete_cookie(
         key="refresh_token",
         path="/",
         httponly=True,
-        secure=True,
+        secure=settings.is_production,
         samesite="lax",
     )
