@@ -204,7 +204,8 @@ async def get_avatar(
             raise ResourceNotFound("User is not found")
 
         if user.image_s3_path is None:
-            raise S3StorageError("A way to the avatar in the database is not exist.")
+            logger.info("Success: user has no avatar set")
+            return PresignUrlGet(presigned_url=None)
 
         presigned_url = await create_presigned_url(bucket, user.image_s3_path, region_name, expiration=3600)
         await save_presigned_url_to_redis(presigned_url, current_user.user_id)
@@ -273,6 +274,8 @@ async def confirm_avatar(
     if user is None:
         raise ResourceNotFound("User is not found")
 
+    old_image_s3_path = user.image_s3_path
+
     try:
         await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
         await db.commit()
@@ -280,8 +283,8 @@ async def confirm_avatar(
         await db.rollback()
         raise ResourceNotFound("User is not found")
 
-    if user.image_s3_path:
-        await delete_file(bucket, user.image_s3_path)
+    if old_image_s3_path and old_image_s3_path != new_image_s3_path:
+        await delete_file(bucket, old_image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
 
     presigned_url = await create_presigned_url(bucket, new_image_s3_path, region_name, expiration=3600)
@@ -316,6 +319,8 @@ async def delete_avatar(
     if user is None:
         raise ResourceNotFound("User is not found")
 
+    old_image_s3_path = user.image_s3_path
+
     if user.image_s3_path:
         try:
             await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
@@ -323,7 +328,7 @@ async def delete_avatar(
         except Exception:
             await db.rollback()
             raise ResourceNotFound("User is not found")
-        await delete_file(bucket, user.image_s3_path)
+        await delete_file(bucket, old_image_s3_path)
         await delete_presigned_url_from_redis(current_user.user_id)
 
     user = await UserDAO.find_one_or_none_with_related_data(db, User.id == current_user.user_id)

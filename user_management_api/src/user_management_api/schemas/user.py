@@ -21,7 +21,7 @@ class PresignUrlGet(BaseModel):
     """
     Schema for getting the presign url from redis to an avatar usage.
     """
-    presigned_url: str
+    presigned_url: str | None
 
 
 class PresignedPostResponse(BaseModel):
