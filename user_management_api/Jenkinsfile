@@ -1,0 +1,133 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: python
+    image: python:3.13
+    imagePullPolicy: IfNotPresent
+    command: ['sh', '-c', 'sleep 3600']
+    workingDir: /home/jenkins/agent
+    securityContext:
+      runAsUser: 0
+    tty: true
+  - name: build-tools
+    image: docker:cli
+    imagePullPolicy: IfNotPresent
+    command: ['sh', '-c', 'sleep 3600']
+    workingDir: /home/jenkins/agent
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+    tty: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    imagePullPolicy: IfNotPresent
+    command: ['sh', '-c', 'sleep 3600']
+    workingDir: /home/jenkins/agent
+    securityContext:
+      runAsUser: 0
+    tty: true
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+'''
+        }
+    }
+
+    stages {
+
+        stage('Python CI (Install, Lint, Tests)') {
+            steps {
+                container('python') {
+                    dir('user_management_api') {
+                        sh '''
+                            pip install --no-cache-dir poetry
+                            poetry install --no-root
+                            poetry run ruff check .
+                        '''
+                        withEnv([
+                            'DATABASE_URL=sqlite+aiosqlite:///./test.db',
+                            'SECRET_KEY=test',
+                            'ALGORITHM=HS256',
+                            'REDIS_HOST=localhost',
+                            'REDIS_PORT=6379',
+                            'REDIS_PASSWORD=test',
+                            'AWS_ACCESS_KEY_ID=test',
+                            'AWS_SECRET_ACCESS_KEY=test',
+                            'AWS_REGION=us-east-1',
+                            'BUCKET_NAME=test',
+                            'RABBITMQ_URL=amqp://guest:guest@localhost/'
+                        ]) {
+                            sh '''
+                                poetry run coverage run -m pytest
+                                poetry run coverage report
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker') {
+            steps {
+                container('build-tools') {
+                    dir('user_management_api'){
+                        sh 'docker build -t yuliyaswork/ums:latest .'
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker') {
+            steps {
+                container('build-tools') {
+                    dir('user_management_api'){
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+
+                            sh '''
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                docker push yuliyaswork/ums:latest
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+
+        stage('Deploy to Minikube') {
+            steps {
+                container('kubectl') {
+                    dir('infra-repo') {
+                        git branch: 'feature/k8s', credentialsId: 'github-token', url: 'https://github.com/YuliyaS-work/Innotter_Infrastructure.git'
+
+                        sh '''
+                            kubectl apply -f k8s/namespace.yaml
+
+                            kubectl apply -f k8s/shared/rabbitmq.yaml --validate=false
+                            kubectl rollout status statefulset rabbitmq -n app --timeout=90s
+                            kubectl apply -f k8s/shared/redis.yaml --validate=false
+                            kubectl rollout status statefulset redis -n app --timeout=90s
+
+                            kubectl apply -f k8s/ums/ --validate=false
+
+                            kubectl rollout status statefulset ums-postgres -n app --timeout=120s
+
+                            kubectl apply -f k8s/ingress.yaml --validate=false
+
+                            kubectl rollout restart deployment ums -n app
+                            kubectl rollout status deployment ums -n app --timeout=120s
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}

@@ -22,7 +22,13 @@ async def lifespan(app: FastAPI):
         async with rabbitmq_lifespan(app):
             yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    root_path="/ums",
+    docs_url="/docs",
+    openapi_url="/openapi.json"
+)
+
 
 app.include_router(health_router)
 app.include_router(auth_router)
