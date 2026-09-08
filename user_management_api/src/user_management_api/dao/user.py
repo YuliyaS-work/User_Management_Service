@@ -114,15 +114,28 @@ class UserDAO(BaseDAO[User]):
         Update roles for user in user_role table without commiting.
         """
         user_id_uuid = uuid.UUID(user_id)
+
+        result = await db.execute(select(Role.id).where(Role.role_name == "USER"))
+        USER_ROLE_ID = result.scalar_one()
+
         await db.execute(
-            delete(user_role).where(user_role.c.user_id == user_id_uuid)
+            delete(user_role)
+            .where(user_role.c.user_id == user_id_uuid)
+            .where(user_role.c.role_id != USER_ROLE_ID)
         )
 
-        if roles_id is not None:
+        await db.flush()
+
+        patch_roles = set(roles_id)
+        patch_roles.discard(USER_ROLE_ID)
+
+
+        if patch_roles:
             await db.execute(
                 insert(user_role),
-                [{"user_id": user_id_uuid, "role_id": role_id} for role_id in roles_id]
+                [{"user_id": user_id_uuid, "role_id": role_id} for role_id in patch_roles]
             )
+
 
     @classmethod
     async def delete_by_id(cls, db: AsyncSession, user_id: str) -> None:
@@ -131,5 +144,10 @@ class UserDAO(BaseDAO[User]):
         """
         user_id_uuid = uuid.UUID(user_id)
         instance = await db.get(cls.model, user_id_uuid)
+
+        if instance is None:
+            await db.flush()
+            return
+
         await db.delete(instance)
         await db.flush()

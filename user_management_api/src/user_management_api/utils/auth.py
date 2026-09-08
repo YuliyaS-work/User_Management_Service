@@ -32,7 +32,7 @@ def send_tokens_to_user(response: Response, access_token: str, refresh_token: st
         value=access_token,
         path="/",
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax",
         max_age=600
     )

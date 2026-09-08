@@ -16,6 +16,8 @@ services:
         - postgres-data:/var/lib/postgresql/data
       ports:
         - "5432:5432"
+      networks:
+        - inner-net
 
     redis:
       image: redis:latest
@@ -25,6 +27,8 @@ services:
       volumes:
         - redis_data:/data
       command: redis-server --bind 0.0.0.0 --requirepass ${REDIS_PASSWORD} --appendonly yes
+      networks:
+        - inner-net
 
     rabbitmq:
       image: rabbitmq:3-management
@@ -44,6 +48,8 @@ services:
         - "15672:15672"
       volumes:
         - rabbitmq_data:/var/lib/rabbitmq
+      networks:
+        - inner-net
 
 
     ums_app:
@@ -72,8 +78,14 @@ services:
           condition: service_healthy
       ports:
         - "8000:8000"
+      networks:
+        - inner-net
 
 volumes:
   postgres-data:
   redis_data:
   rabbitmq_data:
+
+networks:
+  inner-net:
+    external: true

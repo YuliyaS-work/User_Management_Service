@@ -1,7 +1,8 @@
+import uuid
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
-from sqlalchemy import insert, Insert
+from sqlalchemy import Insert, Delete
 
 from src.user_management_api.dao.user import UserDAO
 from src.user_management_api.schemas.user import UserPagination, UserFilter
@@ -184,3 +185,97 @@ async def test_find_one_or_none_not_found(mock_db, mock_user_data):
     # Assert
     assert result is None
     mock_db.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_user_role_success(mock_db):
+    """
+    UserDAO.update_user_role() should update roles except USER role.
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+
+    mock_role_result = MagicMock()
+    mock_role_result.scalar_one.return_value = 1
+    mock_db.execute = AsyncMock(side_effect=[mock_role_result, None, None])
+
+    # Act
+    await UserDAO.update_user_role(mock_db, user_id, roles_id=[1,2,3])
+
+    # Assert
+    assert mock_db.execute.call_count == 3
+    delete_call = mock_db.execute.call_args_list[1]
+    delete_statement = delete_call[0][0]
+    assert isinstance(delete_statement, Delete)
+
+    insert_call = mock_db.execute.call_args_list[2]
+    insert_statement, insert_values = insert_call[0]
+    assert isinstance(insert_statement, Insert)
+    assert insert_values == [
+        {"user_id": uuid.UUID(user_id), "role_id": 2},
+        {"user_id": uuid.UUID(user_id), "role_id": 3},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_user_role_empty_roles(mock_db):
+    """
+    UserDAO.update_user_role() should not insert anything when roles_id is empty.
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+
+    mock_role_result = MagicMock()
+    mock_role_result.scalar_one.return_value = 1
+    mock_db.execute = AsyncMock(side_effect=[mock_role_result, None])
+
+    # Act
+    await UserDAO.update_user_role(mock_db, user_id, roles_id=[])
+
+    # Assert
+    assert mock_db.execute.call_count == 2
+    insert_calls = [
+        call for call in mock_db.execute.call_args_list if isinstance(call[0][0], Insert)
+    ]
+    assert insert_calls == []
+
+
+@pytest.mark.asyncio
+async def test_delete_by_id_success(mock_db):
+    """
+    UserDAO.delete_by_id() should User instance.
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+    fake_user = MagicMock()
+    mock_db.get = AsyncMock(return_value=fake_user)
+    mock_db.delete = AsyncMock()
+    mock_db.flush = AsyncMock()
+
+    # Act
+    await UserDAO.delete_by_id(mock_db, user_id)
+
+    # Assert
+    mock_db.get.assert_called_once_with(UserDAO.model, uuid.UUID(user_id))
+    mock_db.delete.assert_called_once_with(fake_user)
+    mock_db.flush.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_by_id_user_not_found(mock_db):
+    """
+    UserDAO.delete_by_id() should do nothing when user does not exist.
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+    mock_db.get = AsyncMock(return_value=None)
+    mock_db.delete = AsyncMock()
+    mock_db.flush = AsyncMock()
+
+    # Act
+    await UserDAO.delete_by_id(mock_db, user_id)
+
+    # Assert
+    mock_db.get.assert_called_once()
+    mock_db.delete.assert_not_called()
+    mock_db.flush.assert_called_once()

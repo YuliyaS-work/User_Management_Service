@@ -326,3 +326,28 @@ async def save_password(
     logger.info(f"Success: password saved, user ID={user.id}.")
 
     return {"message": "Password was changed successfully"}
+
+
+def validate_incoming_token(request: Request) -> CurrentUser :
+    """
+    Validate incoming access token from Innoter Service.
+
+    Args:
+        request (Request): used to build the reset-password URL.
+    Returns:
+        CurrentUser: contains user ID, roles ID, group ID.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise AuthenticationException("Missing token")
+
+    incoming_access_token = auth_header.split(" ")[1]
+
+    payload = decode_token(incoming_access_token)
+    validate_access_token(payload)
+    current_user = CurrentUser(
+        user_id=payload.sub,
+        group_id=payload.group_id,
+        roles=payload.roles
+    )
+    return current_user
