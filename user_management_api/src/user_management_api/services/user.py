@@ -2,16 +2,18 @@
 The module providing handlers for the user information in a profile,
 including  operations.
 """
+import json
 import logging
 import math
+from datetime import datetime, timezone
 from operator import and_
 from typing import Any, Sequence
-from uuid import UUID
 
-from fastapi import Depends, Request, Response
+from fastapi import Depends, Request, Response, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.user_management_api.core.config import settings
+from src.user_management_api.rabbitmq.publisher import safe_publish
 from src.user_management_api.storage_s3.s3_client import  delete_file, create_presigned_url, \
     create_presigned_post, generate_image_s3_path
 from src.user_management_api.dao.user import UserDAO
@@ -82,6 +84,7 @@ async def get_me(
 async def delete_me(
         request: Request,
         response: Response,
+        background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_session),
         current_user: CurrentUser = Depends(get_current_user),
         bucket: str = settings.bucket_name,
@@ -92,6 +95,7 @@ async def delete_me(
     Args:
         request (Request): Get an access token from cookies.
         response (Response):  Delete JWT tokens from cookie.
+        background_tasks (BackgroundTasks): Schedules publishing the message asynchronously.
         db (Session): Database session.
         current_user (CurrentUser) : A user data from JWT access token for getting a user profile.
         bucket: The bucket name in AWS S3.
@@ -123,6 +127,22 @@ async def delete_me(
 
         logger.info("Success: deleting user data")
 
+        # Create a message for publishing.
+        message = {
+            "user_id": current_user.user_id,
+            "datetime": datetime.now(timezone.utc).isoformat()
+        }
+
+        # Publish a reset-password message to RabbitMQ asynchronously.
+        background_tasks.add_task(
+            safe_publish,
+            request.app,
+            json.dumps(message),
+            "delete-user-data",
+            headers=None
+        )
+        logger.info("Success: message sent to RabbitMQ for deletion user data.")
+
         return {"detail": "A user profile was deleted."}
     else:
         raise AuthenticationException
@@ -147,7 +167,7 @@ async def patch_me(
         logger.info(f"Start: patch user data by ID={current_user.user_id}")
         await UserDAO.patch_by_id(db, current_user.user_id, data.model_dump(exclude_unset=True))
         await db.commit()
-    except:
+    except Exception:
         await db.rollback()
         raise ResourceNotFound("User is not found")
 
@@ -256,7 +276,7 @@ async def confirm_avatar(
     try:
         await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": new_image_s3_path})
         await db.commit()
-    except:
+    except Exception:
         await db.rollback()
         raise ResourceNotFound("User is not found")
 
@@ -300,7 +320,7 @@ async def delete_avatar(
         try:
             await UserDAO.patch_by_id(db, current_user.user_id, {"image_s3_path": None})
             await db.commit()
-        except:
+        except Exception:
             await db.rollback()
             raise ResourceNotFound("User is not found")
         await delete_file(bucket, user.image_s3_path)
@@ -415,7 +435,7 @@ async def get_users(
     Returns:
         dict : Data for each role of current user.
     """
-    logger.info(f"Start: fetch users list for ADMIN/MODERATOR role.")
+    logger.info("Start: fetch users list for ADMIN/MODERATOR role.")
 
     response = {}
     roles = {
@@ -425,7 +445,7 @@ async def get_users(
 
     for role, role_condition in roles.items():
         # Check allowed role.
-        if not role in current_user.roles:
+        if role not in current_user.roles:
             continue
 
         # Get data from database.
@@ -445,6 +465,6 @@ async def get_users(
     if response == {}:
         raise AuthorizationError("Not allowed")
 
-    logger.info(f"Success: getting serialized users list data.")
+    logger.info("Success: getting serialized users list data.")
 
     return response

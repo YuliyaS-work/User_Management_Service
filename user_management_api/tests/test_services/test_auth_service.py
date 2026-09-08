@@ -7,10 +7,10 @@ from sqlalchemy import BinaryExpression, BooleanClauseList
 
 from src.user_management_api.exceptions.auth import AuthenticationException, ConflictException, APIException
 from src.user_management_api.exceptions.user import ResourceNotFound
-from src.user_management_api.schemas.auth import UserLogin, ForgetPasswordRequest, ResetPasswordRequest
+from src.user_management_api.schemas.auth import UserLogin, ForgetPasswordRequest
 from src.user_management_api.services.auth import get_current_user, create_and_store_tokens, verify_refresh_token, \
     register_user, login_user, logout_user, renew_tokens, reset_password, save_password
-from tests.conftest import fake_background_tasks, FakeRequest
+from tests.conftest import  FakeRequest
 
 
 # Tests for get_current_user()
@@ -300,7 +300,7 @@ async def test_register_user_email_conflict(
 
 @pytest.mark.asyncio
 @patch("src.user_management_api.services.auth.UserDAO.find_one_or_none")
-async def test_register_user_username_conflict(
+async def test_register_user_phonenumber_conflict(
         mock_find_user,
         mock_db,
         fake_response,
@@ -786,11 +786,11 @@ async def test_renew_tokens_create_tokens_fail(
 # Tests for reset_password()
 
 @pytest.mark.asyncio
-@patch("src.user_management_api.services.auth.publish_message")
+@patch("src.user_management_api.services.auth.safe_publish")
 @patch("src.user_management_api.services.auth.create_reset_password_token")
 async def test_reset_password_success(
         mock_create_reset_password_token,
-        mock_publish_message,
+        mock_safe_publish,
         fake_background_tasks,
         freezer_time
 ):
@@ -811,10 +811,12 @@ async def test_reset_password_success(
 
     mock_create_reset_password_token.assert_called_once_with("user@example.com")
     fake_background_tasks.add_task.assert_called_once()
-    _, args,_ = fake_background_tasks.add_task.mock_calls[0]
+    _, args, kwargs = fake_background_tasks.add_task.mock_calls[0]
 
-    assert args[0] is mock_publish_message
+    assert args[0] is mock_safe_publish
     assert args[1] is request.app
+    assert args[3] == "reset-password-stream"
+    assert kwargs["headers"] == {"x-retry-count": 0}
 
     message = json.loads(args[2])
 
@@ -827,11 +829,11 @@ async def test_reset_password_success(
 
 
 @pytest.mark.asyncio
-@patch("src.user_management_api.services.auth.publish_message")
+@patch("src.user_management_api.services.auth.safe_publish")
 @patch("src.user_management_api.services.auth.create_reset_password_token")
 async def test_reset_password_create_reset_password_token_fail(
         mock_create_reset_password_token,
-        mock_publish_message,
+        mock_safe_publish,
         fake_background_tasks,
         freezer_time
 ):
@@ -848,7 +850,7 @@ async def test_reset_password_create_reset_password_token_fail(
         await reset_password(fake_background_tasks, data, request)
 
     # Assert
-    mock_publish_message.assert_not_called()
+    mock_safe_publish.assert_not_called()
     fake_background_tasks.add_task.assert_not_called()
 
 

@@ -5,7 +5,7 @@ authors = [
     {name = "Yulya Sarokina"}
 ]
 readme = "README.md"
-requires-python = "^3.13"
+requires-python = ">=3.13,<4.0"
 dependencies = [
     "fastapi (>=0.135.1,<0.136.0)",
     "sqlalchemy (>=2.0.48,<3.0.0)",

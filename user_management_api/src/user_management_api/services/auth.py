@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 
 import phonenumbers
-from fastapi import Response, Request, BackgroundTasks, status
+from fastapi import Response, Request, BackgroundTasks
 from phonenumbers.phonenumberutil import NumberParseException
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from src.user_management_api.core.security import get_password_hash, create_acce
 from src.user_management_api.exceptions.auth import ConflictException, APIException, AuthenticationException
 from src.user_management_api.exceptions.user import ResourceNotFound
 from src.user_management_api.models import User
-from src.user_management_api.rabbitmq.publisher import publish_message
+from src.user_management_api.rabbitmq.publisher import safe_publish
 from src.user_management_api.redis.auth import save_refresh_token_to_redis, delete_refresh_token_from_redis
 
 from src.user_management_api.schemas.auth import UserRegister, UserLogin, TokenResponse, CurrentUser, \
@@ -67,7 +67,7 @@ async def create_and_store_tokens(user_id: str, db: AsyncSession) -> tuple[str, 
     access_token = create_access_token(access_payload)
     refresh_token, jti = create_refresh_token({"sub": user_id})
     await save_refresh_token_to_redis(refresh_token, jti, user_id)
-    logger.info(f"Success: access and refresh tokens are created")
+    logger.info("Success: access and refresh tokens are created")
     return access_token, refresh_token
 
 
@@ -75,7 +75,7 @@ async def verify_refresh_token(request: Request) -> tuple[str, str]:
     """
     Verify refresh token from cookies to one stored in redis.
     """
-    logger.info(f"Start: verifying refresh token from cookies")
+    logger.info("Start: verifying refresh token from cookies")
     old_refresh_token = get_refresh_token_from_cookie(request)
     payload = decode_token(old_refresh_token)
     hash_token = get_token_hash(old_refresh_token)
@@ -199,7 +199,7 @@ async def logout_user(
     Returns:
         dict: Message about success of log out.
     """
-    logger.info(f"Start: user log out")
+    logger.info("Start: user log out")
 
     # Verify refresh token from cookies and move it to the blacklist.
     try:
@@ -224,7 +224,7 @@ async def renew_tokens(request: Request, response: Response, db: AsyncSession) -
         TokenResponse: An access and refresh tokens.
     """
 
-    logger.info(f"Start: renewing access and refresh tokens.")
+    logger.info("Start: renewing access and refresh tokens.")
     try:
         # Verify a refresh token and move it to the blacklist.
         user_id, jti = await verify_refresh_token(request)
@@ -261,7 +261,7 @@ async def reset_password(
     Returns:
         dict[str, str]: Confirm that the message was published to RabbitMQ.
     """
-    logger.info(f"Start: reset password.")
+    logger.info("Start: reset password.")
 
     # Create a reset-password token.
     token = create_reset_password_token(data.email)
@@ -280,9 +280,11 @@ async def reset_password(
 
     # Publish a reset-password message to RabbitMQ asynchronously.
     background_tasks.add_task(
-        publish_message,
+        safe_publish,
         request.app,
-        json.dumps(message)
+        json.dumps(message),
+        "reset-password-stream",
+        headers={"x-retry-count": 0}
     )
     logger.info(f"Success: message sent to RabbitMQ for user email={data.email}.")
 
@@ -318,7 +320,7 @@ async def save_password(
 
     try:
         await UserDAO.patch_by_id(db, str(user.id), {"password": new_password_hash})
-    except:
+    except Exception:
         raise APIException("Failed to update password.")
 
     await db.commit()

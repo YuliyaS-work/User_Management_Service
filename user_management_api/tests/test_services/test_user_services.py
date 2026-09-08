@@ -1,4 +1,5 @@
 import copy
+import json
 from unittest.mock import patch, MagicMock, ANY
 
 import pytest
@@ -66,6 +67,7 @@ async def test_get_me_success(
 
 
 @pytest.mark.asyncio
+@patch("src.user_management_api.services.user.safe_publish")
 @patch("src.user_management_api.services.user.verify_refresh_token")
 @patch("src.user_management_api.services.user.delete_refresh_token_from_redis")
 @patch("src.user_management_api.services.user.delete_tokens_from_cookies")
@@ -81,10 +83,12 @@ async def test_delete_me_success(
         mock_delete_tokens_from_cookies,
         mock_delete_refresh_token_from_redis,
         mock_verify_refresh_token,
+        mock_safe_publish,
         mock_user,
         fake_response,
         fake_request,
-        mock_db
+        mock_db,
+        fake_background_tasks,
 ):
     """
     delete_me() should remove user profile, avatar, tokens, and Redis data.
@@ -92,13 +96,26 @@ async def test_delete_me_success(
     # Arrange
     mock_verify_refresh_token.return_value = (str(mock_user.id), "jti")
     mock_find_user.return_value = mock_user
+
     current_user = CurrentUser(user_id=str(mock_user.id), group_id=1, roles=["USER"])
 
     # Act
-    result = await delete_me(fake_request, fake_response, mock_db, current_user)
+    result = await delete_me(fake_request, fake_response, fake_background_tasks, mock_db, current_user)
 
     # Assert
     assert result == {"detail": "A user profile was deleted."}
+
+    fake_background_tasks.add_task.assert_called_once()
+    _, args, kwargs = fake_background_tasks.add_task.mock_calls[0]
+    assert args[0] is mock_safe_publish
+    assert args[1] is fake_request.app
+    assert args[3] == "delete-user-data"
+    assert kwargs["headers"] is None
+
+    message = json.loads(args[2])
+
+    assert message["user_id"] == str(mock_user.id)
+    assert "datetime" in message
 
     mock_verify_refresh_token.assert_called_once_with(fake_request)
     mock_delete_refresh_token_from_redis.assert_called_once_with(str(mock_user.id), "jti")
@@ -110,6 +127,7 @@ async def test_delete_me_success(
 
 
 @pytest.mark.asyncio
+@patch("src.user_management_api.services.user.safe_publish")
 @patch("src.user_management_api.services.user.verify_refresh_token")
 @patch("src.user_management_api.services.user.delete_refresh_token_from_redis")
 @patch("src.user_management_api.services.user.delete_tokens_from_cookies")
@@ -125,10 +143,12 @@ async def test_delete_me_user_not_found(
         mock_delete_tokens_from_cookies,
         mock_delete_refresh_token_from_redis,
         mock_verify_refresh_token,
+        mock_safe_publish,
         mock_user,
         fake_response,
         fake_request,
-        mock_db
+        mock_db,
+        fake_background_tasks
 ):
     """
     delete_me() should raise ResourceNotFound when user does not exist.
@@ -140,7 +160,7 @@ async def test_delete_me_user_not_found(
 
     # Act
     with pytest.raises(ResourceNotFound) as e:
-        await delete_me(fake_request, fake_response, mock_db, current_user)
+        await delete_me(fake_request, fake_response, fake_background_tasks, mock_db, current_user)
 
     # Assert
     assert e.value.detail == "User is not found"
@@ -149,6 +169,8 @@ async def test_delete_me_user_not_found(
     mock_delete_refresh_token_from_redis.assert_called_once_with(str(mock_user.id), "jti")
     mock_delete_tokens_from_cookies.assert_called_once_with(fake_response)
     mock_find_user.assert_awaited_once()
+    mock_safe_publish.assert_not_called()
+    fake_background_tasks.add_task.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -158,7 +180,8 @@ async def test_delete_me_fail(
         mock_user,
         fake_response,
         fake_request,
-        mock_db
+        mock_db,
+        fake_background_tasks
 ):
     """
     delete_me() should raise AuthenticationException when token user_id mismatches.
@@ -169,7 +192,7 @@ async def test_delete_me_fail(
 
     # Act
     with pytest.raises(AuthenticationException):
-        await delete_me(fake_request, fake_response, mock_db, current_user)
+        await delete_me(fake_request, fake_response, fake_background_tasks, mock_db, current_user)
 
 
 @pytest.mark.asyncio
@@ -231,7 +254,7 @@ async def test_patch_me_user_not_found(
 
     # Act
     with pytest.raises(ResourceNotFound) as e:
-        result = await patch_me(data, mock_db, current_user)
+        await patch_me(data, mock_db, current_user)
 
     # Assert
     assert e.value.detail == "User is not found"
@@ -747,7 +770,7 @@ async def test_patch_user_patch_failed(
     """
     # Arrange
     role_1 = MagicMock(id = 1, role_name = StatusRole.USER)
-    role_2 = MagicMock(id = 2, role_name = StatusRole.MODERATOR)
+
     user = mock_user_data()
     user.roles = [role_1]
     data = MagicMock()
