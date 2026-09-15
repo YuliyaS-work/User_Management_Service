@@ -124,7 +124,7 @@ class UserPagination(Params):
     Schema for pagination.
     """
     page: int = 1
-    size: int = 30
+    size: int = 10
 
     @property
     def limit(self) -> int:
