@@ -29,7 +29,7 @@ The service is built with FastAPI and follows a microservice architecture. It us
 - Alembic
 - AsyncPG
 - Redis
-- JWT (PyJWT / Python-JOSE)
+- JWT
 - AioPika
 - AioBoto3
 - Poetry
@@ -62,7 +62,7 @@ The project includes:
 - Custom error handling
 - RabbitMQ message publishing
 - JWT authentication and authorization
-- Unit and integration tests with Pytest
+- Unit tests with Pytest
 - Automated build, lint, and test pipelines using GitHub Actions
  
 ## Testing
